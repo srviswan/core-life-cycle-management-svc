@@ -1,0 +1,78 @@
+# Architecture Decision Records (ADRs)
+
+## Overview
+
+This directory contains Architecture Decision Records (ADRs) that document significant architectural decisions made during the design and implementation of the Core Life Cycle Management Service.
+
+## What are ADRs?
+
+Architecture Decision Records are short text documents that capture important architectural decisions made during a project. They provide context for why certain decisions were made and help future developers understand the reasoning behind the current architecture.
+
+## ADR Format
+
+Each ADR follows this structure:
+
+1. **Title**: A descriptive title for the decision
+2. **Status**: Current status (Proposed, Accepted, Deprecated, Superseded)
+3. **Context**: The situation that led to the decision
+4. **Decision**: The decision that was made
+5. **Consequences**: The resulting context after applying the decision
+6. **Alternatives Considered**: Other options that were evaluated
+7. **Implementation Notes**: Technical details for implementation
+
+## ADR List
+
+### [ADR-001: Service Architecture Pattern](001-service-architecture-pattern.md)
+- **Status**: Accepted
+- **Decision**: Single Lifecycle Management Service with internal component separation
+- **Rationale**: Balance between simplicity and complexity management
+
+### [ADR-002: CDM-Inspired Event Model](002-cdm-inspired-event-model.md)
+- **Status**: Accepted
+- **Decision**: CDM-inspired architecture with custom extensions for synthetic swaps
+- **Rationale**: Industry standards with business-specific flexibility
+
+### [ADR-003: Data Persistence Strategy](003-data-persistence-strategy.md)
+- **Status**: Proposed
+- **Decision**: Polyglot persistence with MS SQL Server, Redis, and Kafka
+- **Rationale**: Right tool for right job based on data characteristics
+
+### [ADR-004: Event Streaming Architecture](004-event-streaming-architecture.md)
+- **Status**: Proposed
+- **Decision**: Apache Kafka for event streaming with guaranteed ordering
+- **Rationale**: High throughput and ordering guarantees for regulatory compliance
+
+### [ADR-005: Container Deployment Strategy](005-container-deployment-strategy.md)
+- **Status**: Proposed
+- **Decision**: Kubernetes-based container orchestration with auto-scaling
+- **Rationale**: Scalability and operational efficiency
+
+## Adding New ADRs
+
+When creating a new ADR:
+
+1. Use the next sequential number
+2. Follow the standard ADR format
+3. Update this README with the new ADR
+4. Ensure the decision is well-documented and justified
+
+## ADR Lifecycle
+
+1. **Proposed**: Initial proposal for review
+2. **Accepted**: Decision has been approved and implemented
+3. **Deprecated**: Decision is no longer relevant
+4. **Superseded**: Decision has been replaced by a newer ADR
+
+## Review Process
+
+ADRs should be reviewed by:
+- Architecture team
+- Development team leads
+- Product owners
+- Security and compliance teams
+
+## References
+
+- [ADR Template](https://adr.github.io/)
+- [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+- [Architecture Decision Records](https://github.com/joelparkerhenderson/architecture_decision_record)

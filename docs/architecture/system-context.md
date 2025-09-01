@@ -1,0 +1,169 @@
+# System Context
+
+## Overview
+
+The Core Life Cycle Management Service operates within a broader synthetic swaps ecosystem, interacting with multiple upstream and downstream systems to manage the complete lifecycle of synthetic equity swaps.
+
+## System Context Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           External Systems                                     │
+│                                                                                 │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐           │
+│  │   Market Data   │    │   Regulatory    │    │   Settlement    │           │
+│  │     Systems     │    │    Gateways     │    │    Systems      │           │
+│  │                 │    │                 │    │                 │           │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘           │
+│           │                       │                       │                   │
+│           │                       │                       │                   │
+└───────────┼───────────────────────┼───────────────────────┼───────────────────┘
+            │                       │                       │
+            │                       │                       │
+┌───────────┼───────────────────────┼───────────────────────┼───────────────────┐
+│           │                       │                       │                   │
+│  ┌─────────────────────────────────────────────────────────────────────────┐   │
+│  │                    Synthetic Swaps Platform                            │   │
+│  │                                                                         │   │
+│  │  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐   │   │
+│  │  │   Trade Capture │    │   Lifecycle     │    │   Real-time     │   │   │
+│  │  │     Service     │    │  Management     │    │      ODS        │   │   │
+│  │  │                 │    │    Service      │    │                 │   │   │
+│  │  └─────────────────┘    └─────────────────┘    └─────────────────┘   │   │
+│  │           │                       │                       │           │   │
+│  │           │                       │                       │           │   │
+│  │           └───────────────────────┼───────────────────────┘           │   │
+│  │                                   │                                   │   │
+│  │  ┌─────────────────────────────────────────────────────────────────┐   │   │
+│  │  │                 Cash Flow & Settlement                          │   │   │
+│  │  │                         Service                                 │   │   │
+│  │  └─────────────────────────────────────────────────────────────────┘   │   │
+│  └─────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+            │                       │                       │
+            │                       │                       │
+┌───────────┼───────────────────────┼───────────────────────┼───────────────────┐
+│           │                       │                       │                   │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐           │
+│  │   Downstream    │    │   Finance &     │    │   Client        │           │
+│  │     Systems     │    │     Risk        │    │   Reporting    │           │
+│  │                 │    │                 │    │                 │           │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘           │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## System Interactions
+
+### Upstream Systems
+
+1. **Trade Capture Service**
+   - **Purpose**: Initial trade entry and validation
+   - **Data Flow**: Enriched swap blotters → Lifecycle Management
+   - **Protocol**: Event streaming (Kafka)
+   - **Frequency**: Real-time
+
+2. **Market Data Systems**
+   - **Purpose**: Real-time market data for valuations
+   - **Data Flow**: Market data → Lifecycle Management
+   - **Protocol**: REST APIs, Event streaming
+   - **Frequency**: Real-time
+
+### Core Service
+
+**Lifecycle Management Service**
+- **Primary Responsibility**: Manage synthetic swap lifecycle
+- **Key Functions**:
+  - Position management (lot-level + aggregated)
+  - Contract lifecycle events
+  - Corporate action processing
+  - Cash flow generation
+  - Real-time ODS publishing
+
+### Downstream Systems
+
+1. **Real-time ODS**
+   - **Purpose**: Operational data store for downstream consumption
+   - **Data Flow**: Lifecycle events → ODS → Downstream systems
+   - **Protocol**: Event streaming (Kafka)
+   - **Frequency**: Real-time
+
+2. **Settlement Systems**
+   - **Purpose**: Payment processing and settlement
+   - **Data Flow**: Cash flow events → Settlement systems
+   - **Protocol**: REST APIs, Event streaming
+   - **Frequency**: Event-driven
+
+3. **Regulatory Gateways**
+   - **Purpose**: Regulatory reporting (MiFID, Dodd-Frank)
+   - **Data Flow**: Lifecycle events → Regulatory systems
+   - **Protocol**: REST APIs, Event streaming
+   - **Frequency**: Real-time + batch
+
+4. **Finance & Risk Systems**
+   - **Purpose**: P&L calculations, risk metrics
+   - **Data Flow**: Position updates → Finance/Risk systems
+   - **Protocol**: Event streaming
+   - **Frequency**: Real-time
+
+5. **Client Reporting Systems**
+   - **Purpose**: Client position and performance reporting
+   - **Data Flow**: Position updates → Client reporting
+   - **Protocol**: Event streaming
+   - **Frequency**: Real-time + end-of-day
+
+## Data Flow Patterns
+
+### Primary Flow
+```
+Hedge Trades → Trade Capture → Lifecycle Management → ODS → Downstream Systems
+```
+
+### Event Flow
+```
+Lifecycle Events → Event Store → Event Processing → ODS Publishing → Downstream
+```
+
+### Cash Flow Flow
+```
+Lifecycle Events → Cash Flow Engine → Settlement Systems → Confirmation
+```
+
+## Integration Patterns
+
+1. **Event Streaming**: Primary communication for high-throughput data
+2. **REST APIs**: Synchronous operations and external integrations
+3. **gRPC**: Service-to-service communication for low latency
+4. **Solace**: Reliable messaging for critical operations
+
+## Key Interfaces
+
+### Input Interfaces
+- **Trade Events**: Kafka topics for trade capture events
+- **Market Data**: REST APIs for real-time market data
+- **Corporate Actions**: Event streaming for corporate action events
+
+### Output Interfaces
+- **Position Updates**: Kafka topics for real-time position data
+- **Cash Flow Events**: Kafka topics for settlement events
+- **Regulatory Events**: Dedicated topics for regulatory reporting
+- **ODS Events**: Real-time operational data for downstream systems
+
+## Non-Functional Requirements
+
+### Performance
+- **Latency**: <100ms for position updates, <15min for regulatory reporting
+- **Throughput**: 1M daily position updates with 4x peak capacity
+- **Availability**: 99.9% uptime with graceful degradation
+
+### Scalability
+- **Horizontal Scaling**: Auto-scaling based on load patterns
+- **Data Growth**: Support for 4x growth in contracts and positions
+- **Peak Handling**: Efficient handling of 4 PM market peak
+
+### Security
+- **Authentication**: OAuth2/JWT for API access
+- **Authorization**: Role-based access control
+- **Data Protection**: Encryption at rest and in transit
+- **Audit Logging**: Complete audit trail for compliance
