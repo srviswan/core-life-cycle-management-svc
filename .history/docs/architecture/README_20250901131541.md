@@ -1,0 +1,74 @@
+# Architecture Documentation
+
+## Overview
+
+This section contains the high-level architecture documentation for the Core Life Cycle Management Service. The architecture is designed to handle complex synthetic equity swaps with high performance, regulatory compliance, and scalability requirements.
+
+## Architecture Documents
+
+### 1. [System Context](system-context.md)
+- High-level system boundaries
+- External system interactions
+- Data flow overview
+
+### 2. [Component Architecture](component-architecture.md)
+- Service decomposition
+- Internal component structure
+- Service communication patterns
+
+### 3. [Data Architecture](data-architecture.md)
+- Data model overview
+- Database design principles
+- Event sourcing strategy
+
+### 4. [Deployment Architecture](deployment-architecture.md)
+- Infrastructure components
+- Container orchestration
+- Scaling strategies
+
+### 5. [Architecture Decision Records](adr/)
+- Key architectural decisions
+- Rationale and alternatives
+- Impact and consequences
+
+## Architecture Principles
+
+1. **CDM-Inspired**: Based on FINOS CDM Event Model with custom extensions
+2. **Event-Driven**: Asynchronous processing with event sourcing
+3. **High Performance**: Optimized for 1M+ daily position updates
+4. **Regulatory Compliance**: MiFID, Dodd-Frank, and other frameworks
+5. **Scalability**: Container-based deployment with auto-scaling
+6. **Resilience**: Circuit breakers, retry mechanisms, and fallbacks
+
+## Key Design Decisions
+
+- **Single Lifecycle Management Service**: Unified service for contract and position management
+- **Event Sourcing**: Complete audit trail and state reconstruction capability
+- **Real-time Processing**: Event-driven architecture for immediate response
+- **Polyglot Persistence**: Right tool for right job (MS SQL + Redis + Kafka)
+- **Container-Based Deployment**: Kubernetes for orchestration and scaling
+
+## Performance Requirements
+
+- **Position Updates**: 1M daily with <100ms response time
+- **Peak Load**: 4x capacity during 4 PM peak
+- **Regulatory SLA**: <15 minutes end-to-end
+- **Corporate Actions**: Concurrent processing (vs. current serial)
+- **Real-time Aggregations**: <10ms for position slicing and dicing
+
+## Regulatory Compliance
+
+- **MiFID II**: Transaction reporting, best execution
+- **Dodd-Frank**: Swap data reporting, clearing requirements
+- **Basel III**: Risk-weighted asset calculations
+- **SOX**: Financial reporting controls
+- **Event Ordering**: Guaranteed ordering for regulatory reporting
+
+## Technology Stack
+
+- **Runtime**: Java 21, Spring Boot
+- **Database**: MS SQL Server (ACID), Redis (caching), Kafka (events)
+- **Messaging**: Apache Kafka (event streaming), Solace (reliable)
+- **Containerization**: Docker, Kubernetes
+- **Monitoring**: Prometheus, Grafana, Jaeger
+- **Testing**: JUnit, TestContainers, JMeter

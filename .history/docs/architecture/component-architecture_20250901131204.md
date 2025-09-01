@@ -188,15 +188,6 @@ The Lifecycle Management Service is designed as a single, cohesive service that 
 - **Performance Optimization**: Efficient data serialization and transmission
 - **Error Handling**: Graceful degradation and retry mechanisms
 
-#### Cash Flow Engine
-- **Interest Cash Flows**: Interest accruals, payments, resets, rate adjustments
-- **Equity Cash Flows**: Dividend management, corporate actions, stock dividends
-- **Complex Dividend Management**: Reinvestment, withholding tax, foreign dividends
-- **Multi-stage Processing**: Accrual → Realized & Deferred → Realized & Unsettled → Realized & Settled
-- **Lot-level Calculations**: Maintain economic accuracy at the lowest granularity
-- **Retry Mechanisms**: Exponential backoff with dead letter queues
-- **Settlement Integration**: Multiple payment and confirmation systems
-
 #### Settlement Integration
 - **Payment Systems**: Integration with various payment gateways
 - **Confirmation Systems**: Trade and settlement confirmations

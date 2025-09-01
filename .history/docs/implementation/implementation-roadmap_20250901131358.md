@@ -71,10 +71,8 @@ This document outlines the phased implementation approach for the Core Life Cycl
 - Contract lifecycle workflows
 
 **Cash Flow Engine**
-- Interest cash flows (accruals, payments, resets)
-- Equity cash flows (dividends, corporate actions)
-- Complex dividend management (reinvestment, withholding tax, foreign dividends)
-- Multi-stage processing (Accrual → Realized & Deferred → Realized & Unsettled → Realized & Settled)
+- Event-driven cash flow generation
+- Corporate action processing
 - Settlement system integration
 - Retry mechanisms and error handling
 
