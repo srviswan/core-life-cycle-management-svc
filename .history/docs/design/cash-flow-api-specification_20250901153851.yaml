@@ -1,0 +1,1272 @@
+openapi: 3.0.3
+info:
+  title: Cash Flow Management Service API
+  description: |
+    Comprehensive API for calculating cash flows for synthetic swap contracts.
+    Supports real-time processing, incremental updates, and historical recalculation.
+  version: 1.0.0
+  contact:
+    name: Core Lifecycle Management Team
+    email: lifecycle-team@financial-firm.com
+  license:
+    name: Proprietary
+    url: https://financial-firm.com/license
+
+servers:
+  - url: https://cashflow-service.internal/api/v1
+    description: Internal production server
+  - url: https://cashflow-service-staging.internal/api/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+tags:
+  - name: Calculations
+    description: Cash flow calculation operations
+  - name: Real-time
+    description: Real-time processing endpoints
+  - name: Historical
+    description: Historical recalculation endpoints
+  - name: Status
+    description: Calculation status and monitoring
+  - name: Cash Flows
+    description: Cash flow data retrieval
+  - name: Settlements
+    description: Settlement instruction management
+
+paths:
+  /cashflows/calculate:
+    post:
+      tags:
+        - Calculations
+      summary: Calculate cash flows
+      description: |
+        Main endpoint for cash flow calculations. Automatically determines calculation mode
+        based on date range and request parameters.
+      operationId: calculateCashFlows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+            examples:
+              realTimeExample:
+                summary: Real-time calculation example
+                value:
+                  cashFlowRequest:
+                    requestId: "CF_REQ_RT_001"
+                    calculationType: "REAL_TIME_PROCESSING"
+                    dateRange:
+                      fromDate: "2024-01-15"
+                      toDate: "2024-01-15"
+                      calculationFrequency: "DAILY"
+                    contracts:
+                      - contractId: "SWAP_IBM_001"
+                        underlying: "IBM"
+                        notionalAmount: 400000
+                        currency: "USD"
+                        equityLeg:
+                          underlying: "IBM"
+                          quantity: 1000
+                          dividendTreatment: "REINVEST"
+                        interestLeg:
+                          rateType: "FLOATING"
+                          index: "LIBOR_3M"
+                          spread: 0.0025
+                          resetFrequency: "QUARTERLY"
+                    positions:
+                      - positionId: "POS_IBM_001"
+                        contractId: "SWAP_IBM_001"
+                        totalQuantity: 1000
+                        status: "ACTIVE"
+                    lots:
+                      - lotId: "LOT_001"
+                        contractId: "SWAP_IBM_001"
+                        quantity: 1000
+                        costPrice: 120.00
+                        costDate: "2019-01-01"
+                        status: "ACTIVE"
+                    paymentSchedules:
+                      - scheduleId: "SCH_001"
+                        contractId: "SWAP_IBM_001"
+                        scheduleType: "INTEREST_PAYMENT"
+                        scheduledDate: "2024-01-15"
+                        leg: "INTEREST"
+                        notionalAmount: 400000
+                    marketDataStrategy:
+                      mode: "HYBRID"
+                      realTimeEndpoints:
+                        enabled: true
+                        timeoutMs: 5000
+                      localCache:
+                        enabled: true
+                        ttlHours: 24
+              historicalExample:
+                summary: Historical recalculation example
+                value:
+                  cashFlowRequest:
+                    requestId: "CF_REQ_HIST_001"
+                    calculationType: "HISTORICAL_RECALCULATION"
+                    dateRange:
+                      fromDate: "2019-01-01"
+                      toDate: "2024-01-15"
+                      calculationFrequency: "DAILY"
+                    marketData:
+                      mode: "SELF_CONTAINED"
+                      compressed: true
+                      data:
+                        securities:
+                          - symbol: "IBM"
+                            basePrice: 120.00
+                            baseDate: "2019-01-01"
+                            changes:
+                              - date: "2019-01-02"
+                                change: 1.20
+                              - date: "2024-01-15"
+                                change: 35.00
+      responses:
+        '200':
+          description: Cash flow calculation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowResponse'
+        '202':
+          description: Calculation accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cashflows/calculate/real-time:
+    post:
+      tags:
+        - Real-time
+      summary: Real-time cash flow calculation
+      description: |
+        Optimized endpoint for real-time cash flow calculations.
+        Forces real-time processing mode regardless of date range.
+      operationId: calculateRealTime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+      responses:
+        '200':
+          description: Real-time calculation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cashflows/calculate/historical:
+    post:
+      tags:
+        - Historical
+      summary: Historical cash flow recalculation
+      description: |
+        Endpoint for historical cash flow recalculations.
+        Optimized for large date ranges and batch processing.
+      operationId: calculateHistorical
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+      responses:
+        '202':
+          description: Historical calculation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cashflows/status/{requestId}:
+    get:
+      tags:
+        - Status
+      summary: Get calculation status
+      description: Retrieve the status of a cash flow calculation request
+      operationId: getCalculationStatus
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the calculation request
+      responses:
+        '200':
+          description: Calculation status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '404':
+          description: Request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cashflows/{contractId}:
+    get:
+      tags:
+        - Cash Flows
+      summary: Get cash flows by contract
+      description: Retrieve cash flows for a specific contract within a date range
+      operationId: getCashFlowsByContract
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Contract identifier
+        - name: fromDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Start date for cash flow retrieval
+        - name: toDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: End date for cash flow retrieval
+        - name: cashFlowType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [INTEREST_PAYMENT, DIVIDEND_PAYMENT, LOT_CLOSURE, INTEREST_ACCRUAL]
+          description: Filter by cash flow type
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [REALIZED_UNSETTLED, REALIZED_SETTLED, ACCRUAL]
+          description: Filter by cash flow state
+      responses:
+        '200':
+          description: Cash flows retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CashFlow'
+        '404':
+          description: Contract not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /settlements/pending:
+    get:
+      tags:
+        - Settlements
+      summary: Get pending settlements
+      description: Retrieve all pending settlement instructions
+      operationId: getPendingSettlements
+      parameters:
+        - name: counterparty
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by counterparty
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
+          description: Filter by currency
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date from
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date to
+      responses:
+        '200':
+          description: Pending settlements retrieved
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettlementInstruction'
+
+  /settlements/{instructionId}/status:
+    put:
+      tags:
+        - Settlements
+      summary: Update settlement status
+      description: Update the status of a settlement instruction
+      operationId: updateSettlementStatus
+      parameters:
+        - name: instructionId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Settlement instruction identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [PENDING, PROCESSING, SETTLED, FAILED]
+                  description: New status for the settlement instruction
+                settlementDate:
+                  type: string
+                  format: date
+                  description: Actual settlement date
+                failureReason:
+                  type: string
+                  description: Reason for failure if status is FAILED
+      responses:
+        '200':
+          description: Settlement status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInstruction'
+        '404':
+          description: Settlement instruction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CashFlowRequest:
+      type: object
+      required:
+        - cashFlowRequest
+      properties:
+        cashFlowRequest:
+          $ref: '#/components/schemas/CashFlowRequestData'
+
+    CashFlowRequestData:
+      type: object
+      required:
+        - requestId
+        - calculationType
+        - dateRange
+        - contracts
+        - positions
+        - lots
+        - paymentSchedules
+      properties:
+        requestId:
+          type: string
+          pattern: '^CF_REQ_[A-Z0-9_]+$'
+          description: Unique request identifier
+        calculationType:
+          type: string
+          enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Type of calculation to perform
+        dateRange:
+          $ref: '#/components/schemas/DateRange'
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SwapContract'
+          minItems: 1
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+          minItems: 1
+        lots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+          minItems: 1
+        paymentSchedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSchedule'
+          minItems: 1
+        marketDataStrategy:
+          $ref: '#/components/schemas/MarketDataStrategy'
+        marketData:
+          $ref: '#/components/schemas/MarketData'
+
+    DateRange:
+      type: object
+      required:
+        - fromDate
+        - toDate
+        - calculationFrequency
+      properties:
+        fromDate:
+          type: string
+          format: date
+          description: Start date for calculations
+        toDate:
+          type: string
+          format: date
+          description: End date for calculations
+        calculationFrequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY]
+          description: Frequency of calculations
+
+    SwapContract:
+      type: object
+      required:
+        - contractId
+        - underlying
+        - notionalAmount
+        - currency
+        - equityLeg
+        - interestLeg
+      properties:
+        contractId:
+          type: string
+          pattern: '^SWAP_[A-Z0-9_]+$'
+        basketContractId:
+          type: string
+          description: Parent basket contract ID if applicable
+        underlying:
+          type: string
+          description: Underlying security symbol
+        tradeDate:
+          type: string
+          format: date
+        effectiveDate:
+          type: string
+          format: date
+        maturityDate:
+          type: string
+          format: date
+        notionalAmount:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        weight:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        counterparties:
+          $ref: '#/components/schemas/Counterparties'
+        equityLeg:
+          $ref: '#/components/schemas/EquityLeg'
+        interestLeg:
+          $ref: '#/components/schemas/InterestLeg'
+
+    Counterparties:
+      type: object
+      required:
+        - buyer
+        - seller
+      properties:
+        buyer:
+          type: string
+        seller:
+          type: string
+
+    EquityLeg:
+      type: object
+      required:
+        - underlying
+        - quantity
+        - dividendTreatment
+        - currency
+      properties:
+        underlying:
+          type: string
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+        dividendTreatment:
+          type: string
+          enum: [REINVEST, CASH, ACCRUE]
+        corporateActionHandling:
+          type: string
+          enum: [AUTOMATIC, MANUAL]
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    InterestLeg:
+      type: object
+      required:
+        - rateType
+        - index
+        - spread
+        - resetFrequency
+        - dayCountConvention
+        - currency
+        - notionalAmount
+      properties:
+        rateType:
+          type: string
+          enum: [FLOATING, FIXED]
+        index:
+          type: string
+          description: Interest rate index (e.g., LIBOR_3M)
+        spread:
+          type: number
+          format: double
+        resetFrequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL]
+        dayCountConvention:
+          type: string
+          enum: [ACT_360, ACT_365, ACT_ACT, 30_360]
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        notionalAmount:
+          type: number
+          format: double
+          minimum: 0
+
+    Position:
+      type: object
+      required:
+        - positionId
+        - contractId
+        - underlying
+        - totalQuantity
+        - currency
+        - status
+      properties:
+        positionId:
+          type: string
+          pattern: '^POS_[A-Z0-9_]+$'
+        contractId:
+          type: string
+        underlying:
+          type: string
+        totalQuantity:
+          type: number
+          format: double
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED, SUSPENDED]
+
+    Lot:
+      type: object
+      required:
+        - lotId
+        - contractId
+        - positionId
+        - underlying
+        - quantity
+        - costPrice
+        - costDate
+        - lotType
+        - status
+      properties:
+        lotId:
+          type: string
+          pattern: '^LOT_[A-Z0-9_]+$'
+        contractId:
+          type: string
+        positionId:
+          type: string
+        underlying:
+          type: string
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+        costPrice:
+          type: number
+          format: double
+          minimum: 0
+        costDate:
+          type: string
+          format: date
+        lotType:
+          type: string
+          enum: [NEW_LOT, ADJUSTMENT, CLOSURE]
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED, SUSPENDED]
+        unwindingMethod:
+          type: string
+          enum: [LIFO, FIFO, HIFO, HICO]
+
+    PaymentSchedule:
+      type: object
+      required:
+        - scheduleId
+        - contractId
+        - scheduleType
+        - scheduledDate
+        - frequency
+        - leg
+        - notionalAmount
+        - version
+        - effectiveFrom
+        - effectiveTo
+      properties:
+        scheduleId:
+          type: string
+          pattern: '^SCH_[A-Z0-9_]+$'
+        contractId:
+          type: string
+        scheduleType:
+          type: string
+          enum: [INTEREST_PAYMENT, DIVIDEND_PAYMENT, LOT_CLOSURE, INTEREST_ACCRUAL]
+        scheduledDate:
+          type: string
+          format: date
+        frequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL, AS_DECLARED]
+        leg:
+          type: string
+          enum: [INTEREST, EQUITY]
+        notionalAmount:
+          type: number
+          format: double
+          minimum: 0
+        version:
+          type: integer
+          minimum: 1
+        effectiveFrom:
+          type: string
+          format: date
+        effectiveTo:
+          type: string
+          format: date
+
+    MarketDataStrategy:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [HYBRID, SELF_CONTAINED, ENDPOINTS]
+          default: HYBRID
+        realTimeEndpoints:
+          $ref: '#/components/schemas/RealTimeEndpoints'
+        localCache:
+          $ref: '#/components/schemas/LocalCache'
+        compression:
+          $ref: '#/components/schemas/Compression'
+
+    RealTimeEndpoints:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        baseUrl:
+          type: string
+          format: uri
+        timeoutMs:
+          type: integer
+          minimum: 1000
+          maximum: 30000
+          default: 5000
+
+    LocalCache:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        ttlHours:
+          type: integer
+          minimum: 1
+          maximum: 168
+          default: 24
+        maxSizeMB:
+          type: integer
+          minimum: 100
+          maximum: 10000
+          default: 1000
+
+    Compression:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          default: true
+        algorithm:
+          type: string
+          enum: [GZIP, LZ4, SNAPPY]
+          default: GZIP
+        deltaEncoding:
+          type: boolean
+          default: true
+
+    MarketData:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [SELF_CONTAINED, ENDPOINTS]
+          default: SELF_CONTAINED
+        compressed:
+          type: boolean
+          default: true
+        data:
+          $ref: '#/components/schemas/MarketDataContent'
+
+    MarketDataContent:
+      type: object
+      properties:
+        securities:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityData'
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateData'
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/DividendData'
+
+    SecurityData:
+      type: object
+      required:
+        - symbol
+        - basePrice
+        - baseDate
+        - changes
+      properties:
+        symbol:
+          type: string
+        basePrice:
+          type: number
+          format: double
+          minimum: 0
+        baseDate:
+          type: string
+          format: date
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceChange'
+
+    PriceChange:
+      type: object
+      required:
+        - date
+        - change
+      properties:
+        date:
+          type: string
+          format: date
+        change:
+          type: number
+          format: double
+
+    RateData:
+      type: object
+      required:
+        - index
+        - baseRate
+        - baseDate
+        - changes
+      properties:
+        index:
+          type: string
+        baseRate:
+          type: number
+          format: double
+        baseDate:
+          type: string
+          format: date
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateChange'
+
+    RateChange:
+      type: object
+      required:
+        - date
+        - change
+      properties:
+        date:
+          type: string
+          format: date
+        change:
+          type: number
+          format: double
+
+    DividendData:
+      type: object
+      required:
+        - symbol
+        - dividends
+      properties:
+        symbol:
+          type: string
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dividend'
+
+    Dividend:
+      type: object
+      required:
+        - exDate
+        - paymentDate
+        - amount
+        - currency
+      properties:
+        exDate:
+          type: string
+          format: date
+        paymentDate:
+          type: string
+          format: date
+        amount:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    CashFlowResponse:
+      type: object
+      required:
+        - cashFlowResponse
+      properties:
+        cashFlowResponse:
+          $ref: '#/components/schemas/CashFlowResponseData'
+
+    CashFlowResponseData:
+      type: object
+      required:
+        - requestId
+        - calculationDate
+        - dateRange
+        - calculationType
+        - summary
+        - contractResults
+        - metadata
+      properties:
+        requestId:
+          type: string
+        calculationDate:
+          type: string
+          format: date
+        dateRange:
+          $ref: '#/components/schemas/DateRange'
+        calculationType:
+          type: string
+          enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+        summary:
+          $ref: '#/components/schemas/CalculationSummary'
+        contractResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractResult'
+        settlementInstructions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementInstruction'
+        metadata:
+          $ref: '#/components/schemas/CalculationMetadata'
+
+    CalculationSummary:
+      type: object
+      required:
+        - totalContracts
+        - totalPositions
+        - totalLots
+        - totalCashFlows
+        - totalAmount
+        - currency
+      properties:
+        totalContracts:
+          type: integer
+          minimum: 0
+        totalPositions:
+          type: integer
+          minimum: 0
+        totalLots:
+          type: integer
+          minimum: 0
+        totalCashFlows:
+          type: integer
+          minimum: 0
+        totalAmount:
+          type: number
+          format: double
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    ContractResult:
+      type: object
+      required:
+        - contractId
+        - underlying
+        - summary
+        - positionResults
+      properties:
+        contractId:
+          type: string
+        basketContractId:
+          type: string
+        underlying:
+          type: string
+        summary:
+          $ref: '#/components/schemas/ContractSummary'
+        positionResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionResult'
+
+    ContractSummary:
+      type: object
+      required:
+        - totalCashFlows
+        - totalInterest
+        - totalDividends
+        - totalP&l
+      properties:
+        totalCashFlows:
+          type: number
+          format: double
+        totalInterest:
+          type: number
+          format: double
+        totalDividends:
+          type: number
+          format: double
+        totalP&l:
+          type: number
+          format: double
+
+    PositionResult:
+      type: object
+      required:
+        - positionId
+        - underlying
+        - summary
+        - lotResults
+      properties:
+        positionId:
+          type: string
+        underlying:
+          type: string
+        summary:
+          $ref: '#/components/schemas/ContractSummary'
+        lotResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/LotResult'
+
+    LotResult:
+      type: object
+      required:
+        - lotId
+        - summary
+        - cashFlows
+      properties:
+        lotId:
+          type: string
+        summary:
+          $ref: '#/components/schemas/ContractSummary'
+        cashFlows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CashFlow'
+
+    CashFlow:
+      type: object
+      required:
+        - date
+        - cashFlowType
+        - equityLeg
+        - interestLeg
+        - totalCashFlow
+        - currency
+      properties:
+        date:
+          type: string
+          format: date
+        cashFlowType:
+          type: string
+          enum: [INTEREST_PAYMENT, DIVIDEND_PAYMENT, LOT_CLOSURE, INTEREST_ACCRUAL]
+        equityLeg:
+          $ref: '#/components/schemas/EquityLegCashFlow'
+        interestLeg:
+          $ref: '#/components/schemas/InterestLegCashFlow'
+        totalCashFlow:
+          type: number
+          format: double
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    EquityLegCashFlow:
+      type: object
+      properties:
+        unrealizedP&l:
+          type: number
+          format: double
+        realizedP&l:
+          type: number
+          format: double
+        totalP&l:
+          type: number
+          format: double
+        dividendAmount:
+          type: number
+          format: double
+        withholdingTax:
+          type: number
+          format: double
+        netDividend:
+          type: number
+          format: double
+
+    InterestLegCashFlow:
+      type: object
+      properties:
+        accruedInterest:
+          type: number
+          format: double
+        interestRate:
+          type: number
+          format: double
+        notionalAmount:
+          type: number
+          format: double
+
+    SettlementInstruction:
+      type: object
+      required:
+        - instructionId
+        - contractId
+        - lotId
+        - cashFlowType
+        - amount
+        - currency
+        - settlementDate
+        - status
+      properties:
+        instructionId:
+          type: string
+          pattern: '^SI_[A-Z0-9_]+$'
+        contractId:
+          type: string
+        lotId:
+          type: string
+        cashFlowType:
+          type: string
+          enum: [INTEREST_PAYMENT, DIVIDEND_PAYMENT, LOT_CLOSURE]
+        amount:
+          type: number
+          format: double
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        counterparty:
+          type: string
+        settlementDate:
+          type: string
+          format: date
+        settlementMethod:
+          type: string
+          enum: [CASH, SECURITIES]
+          default: CASH
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, SETTLED, FAILED]
+          default: PENDING
+
+    CalculationStatus:
+      type: object
+      required:
+        - requestId
+        - status
+        - progress
+        - estimatedCompletionTime
+      properties:
+        requestId:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+        progress:
+          type: object
+          properties:
+            totalContracts:
+              type: integer
+            processedContracts:
+              type: integer
+            percentage:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 100
+        estimatedCompletionTime:
+          type: string
+          format: date-time
+        errorMessage:
+          type: string
+        resultUrl:
+          type: string
+          format: uri
+
+    CalculationMetadata:
+      type: object
+      required:
+        - calculationVersion
+        - calculationEngine
+        - processingTimeMs
+        - memoryUsageMB
+        - cacheHitRate
+        - dataSource
+      properties:
+        calculationVersion:
+          type: string
+        calculationEngine:
+          type: string
+        processingTimeMs:
+          type: integer
+          minimum: 0
+        memoryUsageMB:
+          type: integer
+          minimum: 0
+        cacheHitRate:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        dataSource:
+          type: string
+          enum: [HYBRID, SELF_CONTAINED, ENDPOINTS]
+
+    ErrorResponse:
+      type: object
+      required:
+        - errorCode
+        - message
+        - timestamp
+      properties:
+        errorCode:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: object
+        requestId:
+          type: string
+
+    ValidationError:
+      type: object
+      required:
+        - errorCode
+        - message
+        - timestamp
+        - validationErrors
+      properties:
+        errorCode:
+          type: string
+          default: VALIDATION_ERROR
+        message:
+          type: string
+          default: Validation failed
+        timestamp:
+          type: string
+          format: date-time
+        validationErrors:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+
+    ValidationErrorDetail:
+      type: object
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        value:
+          type: string

@@ -1,0 +1,2323 @@
+openapi: 3.0.3
+info:
+  title: Cash Flow Management Service API
+  description: |
+    Pure calculation service API for cash flows in synthetic swap contracts.
+    Focuses on calculation performance with zero storage overhead for input data.
+    Supports real-time processing, incremental updates, and historical recalculation.
+  version: 1.0.0
+  contact:
+    name: Core Lifecycle Management Team
+    email: lifecycle-team@financial-firm.com
+  license:
+    name: Proprietary
+    url: https://financial-firm.com/license
+
+servers:
+  - url: https://cashflow-service.internal/api/v1
+    description: Internal production server
+  - url: https://cashflow-service-staging.internal/api/v1
+    description: Staging server
+  - url: http://localhost:8080/api/v1
+    description: Local development server
+
+tags:
+  - name: Calculations
+    description: Cash flow calculation operations
+  - name: Real-time
+    description: Real-time processing endpoints
+  - name: Historical
+    description: Historical recalculation endpoints
+  - name: Status
+    description: Calculation status and monitoring
+  - name: Cash Flows
+    description: Cash flow data retrieval
+  - name: Settlements
+    description: Settlement instruction management
+  - name: Audit
+    description: Audit trail and calculation reproduction
+
+paths:
+  /cashflows/calculate:
+    post:
+      tags:
+        - Calculations
+      summary: Calculate cash flows
+      description: |
+        Main endpoint for cash flow calculations. Pure calculation service with zero storage overhead.
+        Automatically determines calculation mode based on date range and request parameters.
+      operationId: calculateCashFlows
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+            examples:
+              realTimeExample:
+                summary: Real-time calculation example
+                value:
+                  cashFlowRequest:
+                    requestId: "CF_REQ_RT_001"
+                    calculationType: "REAL_TIME_PROCESSING"
+                    dateRange:
+                      fromDate: "2024-01-15"
+                      toDate: "2024-01-15"
+                      calculationFrequency: "DAILY"
+                    contracts:
+                      - contractId: "SWAP_IBM_001"
+                        underlying: "IBM"
+                        notionalAmount: 400000
+                        currency: "USD"
+                        equityLeg:
+                          underlying: "IBM"
+                          quantity: 1000
+                          dividendTreatment: "REINVEST"
+                        interestLeg:
+                          rateType: "FLOATING"
+                          index: "LIBOR_3M"
+                          spread: 0.0025
+                          resetFrequency: "QUARTERLY"
+                    positions:
+                      - positionId: "POS_IBM_001"
+                        contractId: "SWAP_IBM_001"
+                        totalQuantity: 1000
+                        status: "ACTIVE"
+                    lots:
+                      - lotId: "LOT_001"
+                        contractId: "SWAP_IBM_001"
+                        quantity: 1000
+                        costPrice: 120.00
+                        costDate: "2019-01-01"
+                        status: "ACTIVE"
+                    paymentSchedules:
+                      - scheduleId: "SCH_001"
+                        contractId: "SWAP_IBM_001"
+                        scheduleType: "INTEREST_PAYMENT"
+                        scheduledDate: "2024-01-15"
+                        leg: "INTEREST"
+                        notionalAmount: 400000
+                    marketDataStrategy:
+                      mode: "HYBRID"
+                      realTimeEndpoints:
+                        enabled: true
+                        timeoutSeconds: 10
+                      cacheStrategy:
+                        enabled: true
+                        ttlHours: 24
+                    marketData:
+                      mode: "SELF_CONTAINED"
+                      data:
+                        securities:
+                          - symbol: "IBM"
+                            basePrice: 125.50
+                            baseDate: "2024-01-15"
+                            changes:
+                              - date: "2024-01-15"
+                                price: 125.50
+                                change: 0.75
+                        rates:
+                          - index: "LIBOR_3M"
+                            baseRate: 0.0525
+                            baseDate: "2024-01-15"
+                            changes:
+                              - date: "2024-01-15"
+                                rate: 0.0525
+                                change: 0.0010
+                        dividends:
+                          - symbol: "IBM"
+                            dividends:
+                              - exDate: "2024-03-15"
+                                paymentDate: "2024-03-30"
+                                amount: 1.65
+                                currency: "USD"
+      responses:
+        '200':
+          description: Cash flow calculation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowResponse'
+              examples:
+                successExample:
+                  summary: Successful calculation response
+                  value:
+                    requestId: "CF_REQ_RT_001"
+                    calculationDate: "2024-01-15"
+                    calculationType: "REAL_TIME_PROCESSING"
+                    status: "COMPLETED"
+                    summary:
+                      totalContracts: 1
+                      totalCashFlows: 2
+                      totalAmount: 1250.75
+                      currency: "USD"
+                    contractResults:
+                      - contractId: "SWAP_IBM_001"
+                        underlying: "IBM"
+                        totalPnl: 550.25
+                        totalInterest: 525.50
+                        totalDividends: 175.00
+                        totalCashFlows: 1250.75
+                        cashFlows:
+                          - cashFlowId: "CF_001"
+                            calculationDate: "2024-01-15"
+                            cashFlowType: "INTEREST_ACCRUAL"
+                            equityLegAmount: 0.00
+                            interestLegAmount: 525.50
+                            totalAmount: 525.50
+                            currency: "USD"
+                            state: "REALIZED_UNSETTLED"
+                          - cashFlowId: "CF_002"
+                            calculationDate: "2024-01-15"
+                            cashFlowType: "EQUITY_PNL"
+                            equityLegAmount: 550.25
+                            interestLegAmount: 0.00
+                            totalAmount: 550.25
+                            currency: "USD"
+                            state: "REALIZED_UNSETTLED"
+                    metadata:
+                      calculationVersion: "1.0"
+                      calculationEngine: "PureCalculationEngine"
+                      processingTimeMs: 280
+                      memoryUsageMB: 512
+                      dataSource: "HYBRID"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cashflows/calculate/real-time:
+    post:
+      tags:
+        - Real-time
+      summary: Real-time cash flow calculation
+      description: |
+        Optimized endpoint for real-time cash flow calculations with sub-100ms response time.
+        Uses pure calculation approach with no input data storage overhead.
+      operationId: calculateRealTime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+      responses:
+        '200':
+          description: Real-time calculation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CashFlowResponse'
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Internal server error
+
+  /cashflows/calculate/historical:
+    post:
+      tags:
+        - Historical
+      summary: Historical cash flow recalculation
+      description: |
+        Asynchronous endpoint for historical cash flow recalculation.
+        Returns calculation status immediately, results available via status endpoint.
+      operationId: calculateHistorical
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CashFlowRequest'
+      responses:
+        '202':
+          description: Historical calculation accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Internal server error
+
+  /cashflows/status/{requestId}:
+    get:
+      tags:
+        - Status
+      summary: Get calculation status
+      description: |
+        Retrieve the status of a calculation request, including progress and results.
+        Supports both real-time and historical calculation status.
+      operationId: getCalculationStatus
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier for the calculation request
+      responses:
+        '200':
+          description: Calculation status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '404':
+          description: Calculation request not found
+        '500':
+          description: Internal server error
+
+  /cashflows/status/natural-key:
+    get:
+      tags:
+        - Status
+      summary: Get calculation status by natural key
+      description: |
+        Retrieve the status of a calculation request by its natural key components.
+        Natural key: (contractId, fromDate, toDate, calculationType)
+      operationId: getCalculationStatusByNaturalKey
+      parameters:
+        - name: contractId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Contract identifier
+        - name: fromDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Start date for calculations
+        - name: toDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: End date for calculations
+        - name: calculationType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Type of calculation
+      responses:
+        '200':
+          description: Calculation status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationStatus'
+        '404':
+          description: Calculation request not found
+        '400':
+          description: Invalid natural key parameters
+        '500':
+          description: Internal server error
+
+  /cashflows/{contractId}:
+    get:
+      tags:
+        - Cash Flows
+      summary: Get cash flows by contract
+      description: |
+        Retrieve cash flows for a specific contract within a date range.
+        Pure calculation service - no contract data stored, only cash flow results.
+      operationId: getCashFlowsByContract
+      parameters:
+        - name: contractId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Contract identifier
+        - name: fromDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Start date for cash flow retrieval
+        - name: toDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: End date for cash flow retrieval
+        - name: cashFlowType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [INTEREST_ACCRUAL, EQUITY_PNL, DIVIDEND, SETTLEMENT]
+          description: Filter by cash flow type
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [REALIZED_UNSETTLED, REALIZED_SETTLED, ACCRUED]
+          description: Filter by cash flow state
+      responses:
+        '200':
+          description: Cash flows retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CashFlow'
+        '400':
+          description: Invalid parameters
+        '404':
+          description: Contract not found
+        '500':
+          description: Internal server error
+
+  /settlements:
+    get:
+      tags:
+        - Settlements
+      summary: Get all settlement instructions
+      description: |
+        Retrieve all settlement instructions generated by cash flow calculations.
+        Supports filtering by status, counterparty, currency, and date range.
+      operationId: getAllSettlements
+    post:
+      tags:
+        - Settlements
+      summary: Create settlement instruction
+      description: |
+        Create a new settlement instruction using natural key components.
+        Natural key: (contractId, cashFlowId, settlementDate, settlementType)
+        Returns 409 Conflict if settlement with same natural key already exists.
+      operationId: createSettlement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementCreateRequest'
+            examples:
+              interestSettlementExample:
+                summary: Create interest settlement
+                value:
+                  contractId: "SWAP_IBM_001"
+                  cashFlowId: "CF_001"
+                  settlementDate: "2024-01-16"
+                  settlementType: "INTEREST"
+                  counterparty: "CLIENT_ABC"
+                  amount: 525.50
+                  currency: "USD"
+                  notes: "Interest payment for IBM swap"
+              dividendSettlementExample:
+                summary: Create dividend settlement
+                value:
+                  contractId: "SWAP_IBM_001"
+                  cashFlowId: "CF_002"
+                  settlementDate: "2024-01-16"
+                  settlementType: "DIVIDEND"
+                  counterparty: "CLIENT_ABC"
+                  amount: 1250.00
+                  currency: "USD"
+                  notes: "Dividend payment for IBM shares"
+      responses:
+        '201':
+          description: Settlement instruction created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInstruction'
+        '400':
+          description: Invalid request parameters
+        '409':
+          description: Settlement with same natural key already exists
+        '500':
+          description: Internal server error
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: Filter by settlement status
+        - name: counterparty
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by counterparty
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by currency
+        - name: settlementType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [INTEREST, EQUITY, DIVIDEND, PRINCIPAL]
+          description: Filter by settlement type
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date from
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date to
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Page size for pagination
+      responses:
+        '200':
+          description: Settlement instructions retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+        '400':
+          description: Invalid parameters
+        '500':
+          description: Internal server error
+
+  /settlements/pending:
+    get:
+      tags:
+        - Settlements
+      summary: Get pending settlements
+      description: |
+        Retrieve pending settlement instructions generated by cash flow calculations.
+        Convenience endpoint for quick access to pending settlements.
+      operationId: getPendingSettlements
+      parameters:
+        - name: counterparty
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by counterparty
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by currency
+        - name: settlementType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [INTEREST, EQUITY, DIVIDEND, PRINCIPAL]
+          description: Filter by settlement type
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Page size for pagination
+      responses:
+        '200':
+          description: Pending settlements retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+        '400':
+          description: Invalid parameters
+        '500':
+          description: Internal server error
+
+  /settlements/{settlementId}:
+    get:
+      tags:
+        - Settlements
+      summary: Get settlement instruction by ID
+      description: |
+        Retrieve a specific settlement instruction by its unique identifier.
+      operationId: getSettlementById
+      parameters:
+        - name: settlementId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Settlement instruction identifier
+      responses:
+        '200':
+          description: Settlement instruction retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInstruction'
+        '404':
+          description: Settlement instruction not found
+        '500':
+          description: Internal server error
+
+  /settlements/natural-key:
+    get:
+      tags:
+        - Settlements
+      summary: Get settlement instruction by natural key
+      description: |
+        Retrieve a specific settlement instruction by its natural key components.
+        Natural key: (contractId, cashFlowId, settlementDate, settlementType)
+      operationId: getSettlementByNaturalKey
+      parameters:
+        - name: contractId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Contract identifier
+        - name: cashFlowId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Cash flow identifier
+        - name: settlementDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Settlement date
+        - name: settlementType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [INTEREST, EQUITY, DIVIDEND, PRINCIPAL]
+          description: Settlement type
+      responses:
+        '200':
+          description: Settlement instruction retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInstruction'
+        '404':
+          description: Settlement instruction not found
+        '400':
+          description: Invalid natural key parameters
+        '500':
+          description: Internal server error
+
+  /settlements/{settlementId}/status:
+    put:
+      tags:
+        - Settlements
+      summary: Update settlement status
+      description: |
+        Update the status of a settlement instruction.
+        Supports status transitions and retry logic.
+      operationId: updateSettlementStatus
+      parameters:
+        - name: settlementId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Settlement instruction identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementStatusUpdate'
+            examples:
+              completeExample:
+                summary: Complete settlement
+                value:
+                  status: "COMPLETED"
+                  actualSettlementDate: "2024-01-16"
+                  settlementReference: "SETT_REF_001"
+                  notes: "Settlement completed successfully"
+              retryExample:
+                summary: Retry failed settlement
+                value:
+                  status: "PENDING"
+                  retryReason: "System timeout, retrying"
+                  nextRetryDate: "2024-01-17"
+              cancelExample:
+                summary: Cancel settlement
+                value:
+                  status: "CANCELLED"
+                  cancellationReason: "Client request"
+                  cancelledBy: "OPERATOR_001"
+      responses:
+        '200':
+          description: Settlement status updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementInstruction'
+        '400':
+          description: Invalid status transition
+        '404':
+          description: Settlement instruction not found
+        '409':
+          description: Status transition not allowed
+        '500':
+          description: Internal server error
+
+  /settlements/bulk/status:
+    put:
+      tags:
+        - Settlements
+      summary: Bulk update settlement status
+      description: |
+        Update the status of multiple settlement instructions in a single request.
+        Useful for batch processing and status synchronization.
+      operationId: bulkUpdateSettlementStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkSettlementStatusUpdate'
+            examples:
+              bulkCompleteExample:
+                summary: Bulk complete settlements
+                value:
+                  settlementIds: ["SETT_001", "SETT_002", "SETT_003"]
+                  status: "COMPLETED"
+                  actualSettlementDate: "2024-01-16"
+                  settlementReference: "BULK_SETT_REF_001"
+                  notes: "Bulk settlement completion"
+      responses:
+        '200':
+          description: Bulk status update completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkSettlementStatusResponse'
+        '400':
+          description: Invalid request parameters
+        '500':
+          description: Internal server error
+
+
+
+  /settlements/summary:
+    get:
+      tags:
+        - Settlements
+      summary: Get settlement summary
+      description: |
+        Retrieve settlement summary statistics and metrics.
+        Provides overview of settlement processing status.
+      operationId: getSettlementSummary
+      parameters:
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date from
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by settlement date to
+        - name: counterparty
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by counterparty
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by currency
+      responses:
+        '200':
+          description: Settlement summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementSummary'
+        '400':
+          description: Invalid parameters
+        '500':
+          description: Internal server error
+
+  /audit/reproduce/{requestId}:
+    get:
+      tags:
+        - Audit
+      summary: Reproduce calculation from audit trail
+      description: |
+        Reproduce a calculation using the original input data from the audit trail.
+        Demonstrates the pure calculation service's ability to reproduce results.
+      operationId: reproduceCalculation
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Original calculation request identifier
+      responses:
+        '200':
+          description: Calculation reproduced successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationReproduction'
+        '404':
+          description: Calculation request not found
+        '500':
+          description: Internal server error
+
+  /audit/calculation-requests:
+    get:
+      tags:
+        - Audit
+      summary: Get calculation requests by contract
+      description: |
+        Retrieve all calculation requests for a specific contract.
+        Supports filtering by date range and calculation type.
+      operationId: getCalculationRequestsByContract
+      parameters:
+        - name: contractId
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Contract identifier
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by calculation start date
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Filter by calculation end date
+        - name: calculationType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Filter by calculation type
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: Filter by calculation status
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number for pagination
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+          description: Page size for pagination
+      responses:
+        '200':
+          description: Calculation requests retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalculationRequestsResponse'
+        '400':
+          description: Invalid parameters
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    CashFlowRequest:
+      type: object
+      required:
+        - requestId
+        - calculationType
+        - dateRange
+        - contracts
+        - positions
+        - lots
+        - paymentSchedules
+        - marketDataStrategy
+        - marketData
+      properties:
+        cashFlowRequest:
+          $ref: '#/components/schemas/CashFlowRequestContent'
+
+    CashFlowRequestContent:
+      type: object
+      required:
+        - requestId
+        - contractId
+        - calculationType
+        - dateRange
+        - contracts
+        - positions
+        - lots
+        - paymentSchedules
+        - marketDataStrategy
+        - marketData
+      properties:
+        requestId:
+          type: string
+          description: Unique identifier for the calculation request (synthetic key)
+          example: "CF_REQ_001"
+        contractId:
+          type: string
+          description: Contract identifier (natural key component)
+          example: "SWAP_IBM_001"
+        calculationType:
+          type: string
+          enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Type of calculation to perform
+        dateRange:
+          $ref: '#/components/schemas/DateRange'
+        contracts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Contract'
+          description: Contract details for calculation
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+          description: Position data for calculation
+        lots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+          description: Lot-level trade data for calculation
+        paymentSchedules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSchedule'
+          description: Payment schedules for calculation
+        marketDataStrategy:
+          $ref: '#/components/schemas/MarketDataStrategy'
+        marketData:
+          $ref: '#/components/schemas/MarketDataContainer'
+
+    DateRange:
+      type: object
+      required:
+        - fromDate
+        - toDate
+      properties:
+        fromDate:
+          type: string
+          format: date
+          description: Start date for calculations
+          example: "2024-01-01"
+        toDate:
+          type: string
+          format: date
+          description: End date for calculations
+          example: "2024-01-15"
+        calculationFrequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY]
+          description: Frequency of calculations
+          example: "DAILY"
+
+    Contract:
+      type: object
+      required:
+        - contractId
+        - underlying
+        - notionalAmount
+        - currency
+        - equityLeg
+        - interestLeg
+      properties:
+        contractId:
+          type: string
+          description: Unique contract identifier
+          example: "SWAP_IBM_001"
+        underlying:
+          type: string
+          description: Underlying asset symbol
+          example: "IBM"
+        notionalAmount:
+          type: number
+          format: double
+          description: Contract notional amount
+          example: 400000
+        currency:
+          type: string
+          description: Contract currency
+          example: "USD"
+        equityLeg:
+          $ref: '#/components/schemas/EquityLeg'
+        interestLeg:
+          $ref: '#/components/schemas/InterestLeg'
+
+    EquityLeg:
+      type: object
+      required:
+        - underlying
+        - quantity
+        - dividendTreatment
+      properties:
+        underlying:
+          type: string
+          description: Equity underlying symbol
+          example: "IBM"
+        quantity:
+          type: number
+          format: double
+          description: Quantity of underlying
+          example: 1000
+        dividendTreatment:
+          type: string
+          enum: [REINVEST, PAY, ACCRUE]
+          description: Dividend treatment method
+          example: "REINVEST"
+        corporateActionHandling:
+          type: string
+          enum: [AUTOMATIC, MANUAL]
+          description: Corporate action handling
+          example: "AUTOMATIC"
+        currency:
+          type: string
+          description: Equity leg currency
+          example: "USD"
+
+    InterestLeg:
+      type: object
+      required:
+        - rateType
+        - index
+        - spread
+        - resetFrequency
+      properties:
+        rateType:
+          type: string
+          enum: [FLOATING, FIXED]
+          description: Interest rate type
+          example: "FLOATING"
+        index:
+          type: string
+          description: Interest rate index
+          example: "LIBOR_3M"
+        spread:
+          type: number
+          format: double
+          description: Interest rate spread
+          example: 0.0025
+        resetFrequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL]
+          description: Interest rate reset frequency
+          example: "QUARTERLY"
+        dayCountConvention:
+          type: string
+          enum: [ACT_360, ACT_365, ACT_ACT, THIRTY_360]
+          description: Day count convention
+          example: "ACT_360"
+        currency:
+          type: string
+          description: Interest leg currency
+          example: "USD"
+        notionalAmount:
+          type: number
+          format: double
+          description: Interest notional amount
+          example: 400000
+
+    Position:
+      type: object
+      required:
+        - positionId
+        - contractId
+        - totalQuantity
+        - currency
+      properties:
+        positionId:
+          type: string
+          description: Unique position identifier
+          example: "POS_IBM_001"
+        contractId:
+          type: string
+          description: Associated contract identifier
+          example: "SWAP_IBM_001"
+        underlying:
+          type: string
+          description: Underlying asset symbol
+          example: "IBM"
+        totalQuantity:
+          type: number
+          format: double
+          description: Total position quantity
+          example: 1000
+        currency:
+          type: string
+          description: Position currency
+          example: "USD"
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED, TERMINATED]
+          description: Position status
+          example: "ACTIVE"
+
+    Lot:
+      type: object
+      required:
+        - lotId
+        - contractId
+        - quantity
+        - costPrice
+        - costDate
+      properties:
+        lotId:
+          type: string
+          description: Unique lot identifier
+          example: "LOT_001"
+        contractId:
+          type: string
+          description: Associated contract identifier
+          example: "SWAP_IBM_001"
+        positionId:
+          type: string
+          description: Associated position identifier
+          example: "POS_IBM_001"
+        underlying:
+          type: string
+          description: Underlying asset symbol
+          example: "IBM"
+        quantity:
+          type: number
+          format: double
+          description: Lot quantity
+          example: 1000
+        costPrice:
+          type: number
+          format: double
+          description: Lot cost price
+          example: 120.00
+        costDate:
+          type: string
+          format: date
+          description: Lot cost date
+          example: "2019-01-01"
+        lotType:
+          type: string
+          enum: [NEW_LOT, ADJUSTMENT_LOT, CLOSING_LOT]
+          description: Lot type
+          example: "NEW_LOT"
+        status:
+          type: string
+          enum: [ACTIVE, CLOSED, ADJUSTED]
+          description: Lot status
+          example: "ACTIVE"
+        unwindingMethod:
+          type: string
+          enum: [LIFO, FIFO, HIFO, HICO]
+          description: Lot unwinding method
+          example: "LIFO"
+
+    PaymentSchedule:
+      type: object
+      required:
+        - scheduleId
+        - contractId
+        - scheduleType
+        - scheduledDate
+        - leg
+      properties:
+        scheduleId:
+          type: string
+          description: Unique schedule identifier
+          example: "SCH_001"
+        contractId:
+          type: string
+          description: Associated contract identifier
+          example: "SWAP_IBM_001"
+        scheduleType:
+          type: string
+          enum: [INTEREST_PAYMENT, EQUITY_PAYMENT, DIVIDEND_PAYMENT, PRINCIPAL_PAYMENT]
+          description: Schedule type
+          example: "INTEREST_PAYMENT"
+        scheduledDate:
+          type: string
+          format: date
+          description: Scheduled payment date
+          example: "2024-01-15"
+        frequency:
+          type: string
+          enum: [DAILY, WEEKLY, MONTHLY, QUARTERLY, SEMI_ANNUAL, ANNUAL]
+          description: Payment frequency
+          example: "QUARTERLY"
+        leg:
+          type: string
+          enum: [INTEREST, EQUITY, BOTH]
+          description: Payment leg
+          example: "INTEREST"
+        notionalAmount:
+          type: number
+          format: double
+          description: Payment notional amount
+          example: 400000
+        version:
+          type: integer
+          description: Schedule version
+          example: 1
+        effectiveFrom:
+          type: string
+          format: date
+          description: Effective from date
+          example: "2024-01-01"
+        effectiveTo:
+          type: string
+          format: date
+          description: Effective to date
+          example: "2024-12-31"
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE, CANCELLED]
+          description: Schedule status
+          example: "ACTIVE"
+
+    MarketDataStrategy:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum: [HYBRID, SELF_CONTAINED, ENDPOINTS]
+          description: Market data loading strategy
+          example: "HYBRID"
+        realTimeEndpoints:
+          $ref: '#/components/schemas/RealTimeEndpoints'
+        cacheStrategy:
+          $ref: '#/components/schemas/CacheStrategy'
+
+    RealTimeEndpoints:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable real-time endpoint calls
+          example: true
+        timeoutSeconds:
+          type: integer
+          description: Timeout for endpoint calls
+          example: 10
+        retryCount:
+          type: integer
+          description: Number of retry attempts
+          example: 3
+        endpoints:
+          type: object
+          properties:
+            priceEndpoint:
+              type: string
+              description: Price data endpoint
+              example: "https://market-data.internal/prices"
+            rateEndpoint:
+              type: string
+              description: Rate data endpoint
+              example: "https://market-data.internal/rates"
+            dividendEndpoint:
+              type: string
+              description: Dividend data endpoint
+              example: "https://market-data.internal/dividends"
+
+    CacheStrategy:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable market data caching
+          example: true
+        ttlHours:
+          type: integer
+          description: Cache time-to-live in hours
+          example: 24
+        maxSizeMB:
+          type: integer
+          description: Maximum cache size in MB
+          example: 1000
+
+    MarketDataContainer:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum: [SELF_CONTAINED, ENDPOINTS, HYBRID]
+          description: Market data mode
+          example: "SELF_CONTAINED"
+        data:
+          $ref: '#/components/schemas/MarketDataContent'
+
+    MarketDataContent:
+      type: object
+      properties:
+        securities:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityData'
+          description: Security price data
+        rates:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateData'
+          description: Interest rate data
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/DividendData'
+          description: Dividend data
+
+    SecurityData:
+      type: object
+      required:
+        - symbol
+        - basePrice
+        - baseDate
+      properties:
+        symbol:
+          type: string
+          description: Security symbol
+          example: "IBM"
+        basePrice:
+          type: number
+          format: double
+          description: Base price
+          example: 125.50
+        baseDate:
+          type: string
+          format: date
+          description: Base date
+          example: "2024-01-15"
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriceChange'
+          description: Price changes over time
+
+    RateData:
+      type: object
+      required:
+        - index
+        - baseRate
+        - baseDate
+      properties:
+        index:
+          type: string
+          description: Rate index
+          example: "LIBOR_3M"
+        baseRate:
+          type: number
+          format: double
+          description: Base rate
+          example: 0.0525
+        baseDate:
+          type: string
+          format: date
+          description: Base date
+          example: "2024-01-15"
+        changes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RateChange'
+          description: Rate changes over time
+
+    DividendData:
+      type: object
+      required:
+        - symbol
+      properties:
+        symbol:
+          type: string
+          description: Security symbol
+          example: "IBM"
+        dividends:
+          type: array
+          items:
+            $ref: '#/components/schemas/Dividend'
+          description: Dividend information
+
+    PriceChange:
+      type: object
+      required:
+        - date
+        - price
+      properties:
+        date:
+          type: string
+          format: date
+          description: Change date
+          example: "2024-01-15"
+        price:
+          type: number
+          format: double
+          description: Price on date
+          example: 125.50
+        change:
+          type: number
+          format: double
+          description: Price change
+          example: 0.75
+
+    RateChange:
+      type: object
+      required:
+        - date
+        - rate
+      properties:
+        date:
+          type: string
+          format: date
+          description: Change date
+          example: "2024-01-15"
+        rate:
+          type: number
+          format: double
+          description: Rate on date
+          example: 0.0525
+        change:
+          type: number
+          format: double
+          description: Rate change
+          example: 0.0010
+
+    Dividend:
+      type: object
+      required:
+        - exDate
+        - paymentDate
+        - amount
+      properties:
+        exDate:
+          type: string
+          format: date
+          description: Ex-dividend date
+          example: "2024-03-15"
+        paymentDate:
+          type: string
+          format: date
+          description: Payment date
+          example: "2024-03-30"
+        amount:
+          type: number
+          format: double
+          description: Dividend amount
+          example: 1.65
+        currency:
+          type: string
+          description: Dividend currency
+          example: "USD"
+
+    CashFlowResponse:
+      type: object
+      required:
+        - requestId
+        - calculationDate
+        - calculationType
+        - status
+        - summary
+        - contractResults
+        - metadata
+      properties:
+        requestId:
+          type: string
+          description: Original request identifier
+          example: "CF_REQ_001"
+        calculationDate:
+          type: string
+          format: date
+          description: Calculation date
+          example: "2024-01-15"
+        calculationType:
+          type: string
+          enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Type of calculation performed
+        dateRange:
+          $ref: '#/components/schemas/DateRange'
+        status:
+          type: string
+          enum: [COMPLETED, PROCESSING, FAILED]
+          description: Calculation status
+        summary:
+          $ref: '#/components/schemas/CalculationSummary'
+        contractResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractResult'
+          description: Results for each contract
+        metadata:
+          $ref: '#/components/schemas/CalculationMetadata'
+
+    CalculationSummary:
+      type: object
+      required:
+        - totalContracts
+        - totalCashFlows
+        - totalAmount
+        - currency
+      properties:
+        totalContracts:
+          type: integer
+          description: Total number of contracts processed
+          example: 1
+        totalCashFlows:
+          type: integer
+          description: Total number of cash flows generated
+          example: 2
+        totalAmount:
+          type: number
+          format: double
+          description: Total cash flow amount
+          example: 1250.75
+        currency:
+          type: string
+          description: Summary currency
+          example: "USD"
+
+    ContractResult:
+      type: object
+      required:
+        - contractId
+        - underlying
+        - totalCashFlows
+      properties:
+        contractId:
+          type: string
+          description: Contract identifier
+          example: "SWAP_IBM_001"
+        underlying:
+          type: string
+          description: Underlying asset
+          example: "IBM"
+        totalPnl:
+          type: number
+          format: double
+          description: Total P&L
+          example: 550.25
+        totalInterest:
+          type: number
+          format: double
+          description: Total interest
+          example: 525.50
+        totalDividends:
+          type: number
+          format: double
+          description: Total dividends
+          example: 175.00
+        totalCashFlows:
+          type: number
+          format: double
+          description: Total cash flows
+          example: 1250.75
+        cashFlows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CashFlow'
+          description: Individual cash flows
+
+    CashFlow:
+      type: object
+      required:
+        - cashFlowId
+        - contractId
+        - calculationDate
+        - cashFlowType
+        - totalAmount
+        - currency
+        - state
+      properties:
+        cashFlowId:
+          type: string
+          description: Unique cash flow identifier
+          example: "CF_001"
+        requestId:
+          type: string
+          description: Associated calculation request
+          example: "CF_REQ_001"
+        contractId:
+          type: string
+          description: Associated contract identifier
+          example: "SWAP_IBM_001"
+        calculationDate:
+          type: string
+          format: date
+          description: Calculation date
+          example: "2024-01-15"
+        cashFlowType:
+          type: string
+          enum: [INTEREST_ACCRUAL, EQUITY_PNL, DIVIDEND, SETTLEMENT]
+          description: Type of cash flow
+          example: "INTEREST_ACCRUAL"
+        equityLegAmount:
+          type: number
+          format: double
+          description: Equity leg amount
+          example: 0.00
+        interestLegAmount:
+          type: number
+          format: double
+          description: Interest leg amount
+          example: 525.50
+        totalAmount:
+          type: number
+          format: double
+          description: Total cash flow amount
+          example: 525.50
+        currency:
+          type: string
+          description: Cash flow currency
+          example: "USD"
+        state:
+          type: string
+          enum: [REALIZED_UNSETTLED, REALIZED_SETTLED, ACCRUED]
+          description: Cash flow state
+          example: "REALIZED_UNSETTLED"
+        equityUnrealizedPnl:
+          type: number
+          format: double
+          description: Unrealized P&L
+          example: 0.00
+        equityRealizedPnl:
+          type: number
+          format: double
+          description: Realized P&L
+          example: 550.25
+        equityTotalPnl:
+          type: number
+          format: double
+          description: Total P&L
+          example: 550.25
+        equityDividendAmount:
+          type: number
+          format: double
+          description: Dividend amount
+          example: 175.00
+        equityWithholdingTax:
+          type: number
+          format: double
+          description: Withholding tax
+          example: 17.50
+        equityNetDividend:
+          type: number
+          format: double
+          description: Net dividend
+          example: 157.50
+        interestAccruedAmount:
+          type: number
+          format: double
+          description: Accrued interest
+          example: 525.50
+        interestRate:
+          type: number
+          format: double
+          description: Interest rate
+          example: 0.0525
+        interestNotionalAmount:
+          type: number
+          format: double
+          description: Interest notional
+          example: 400000
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    CalculationMetadata:
+      type: object
+      required:
+        - calculationVersion
+        - calculationEngine
+        - processingTimeMs
+        - dataSource
+      properties:
+        calculationVersion:
+          type: string
+          description: Calculation engine version
+          example: "1.0"
+        calculationEngine:
+          type: string
+          description: Calculation engine name
+          example: "PureCalculationEngine"
+        processingTimeMs:
+          type: integer
+          description: Processing time in milliseconds
+          example: 280
+        memoryUsageMB:
+          type: integer
+          description: Memory usage in MB
+          example: 512
+        dataSource:
+          type: string
+          enum: [HYBRID, SELF_CONTAINED, ENDPOINTS]
+          description: Data source used
+          example: "HYBRID"
+
+    CalculationStatus:
+      type: object
+      required:
+        - requestId
+        - status
+      properties:
+        requestId:
+          type: string
+          description: Calculation request identifier
+          example: "CF_REQ_001"
+        status:
+          type: string
+          enum: [PROCESSING, COMPLETED, FAILED]
+          description: Calculation status
+        progressPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Progress percentage
+          example: 75
+        statusUrl:
+          type: string
+          description: URL to check status
+          example: "/api/v1/cashflows/status/CF_REQ_001"
+        errorMessage:
+          type: string
+          description: Error message if failed
+        estimatedCompletionTime:
+          type: string
+          format: date-time
+          description: Estimated completion time
+          example: "2024-01-15T11:00:00Z"
+
+    SettlementInstruction:
+      type: object
+      required:
+        - settlementId
+        - contractId
+        - cashFlowId
+        - settlementDate
+        - settlementType
+        - counterparty
+        - amount
+        - currency
+      properties:
+        settlementId:
+          type: string
+          description: Unique settlement identifier (synthetic key)
+          example: "SETT_001"
+        contractId:
+          type: string
+          description: Contract identifier (natural key component)
+          example: "SWAP_IBM_001"
+        cashFlowId:
+          type: string
+          description: Associated cash flow identifier (natural key component)
+          example: "CF_001"
+        settlementDate:
+          type: string
+          format: date
+          description: Settlement date (natural key component)
+          example: "2024-01-16"
+        settlementType:
+          type: string
+          enum: [INTEREST, EQUITY, DIVIDEND, PRINCIPAL]
+          description: Settlement type (natural key component)
+          example: "INTEREST"
+        counterparty:
+          type: string
+          description: Settlement counterparty
+          example: "CLIENT_ABC"
+        amount:
+          type: number
+          format: double
+          description: Settlement amount
+          example: 525.50
+        currency:
+          type: string
+          description: Settlement currency
+          example: "USD"
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: Settlement status
+          example: "PENDING"
+        retryCount:
+          type: integer
+          description: Number of retry attempts
+          example: 0
+        lastRetryDate:
+          type: string
+          format: date-time
+          description: Last retry timestamp
+        nextRetryDate:
+          type: string
+          format: date-time
+          description: Next retry timestamp
+        errorMessage:
+          type: string
+          description: Error message if failed
+        actualSettlementDate:
+          type: string
+          format: date
+          description: Actual settlement date when completed
+        settlementReference:
+          type: string
+          description: External settlement reference
+          example: "SETT_REF_001"
+        notes:
+          type: string
+          description: Additional notes or comments
+        cancelledBy:
+          type: string
+          description: User who cancelled the settlement
+        cancellationReason:
+          type: string
+          description: Reason for cancellation
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:30:00Z"
+
+    SettlementResponse:
+      type: object
+      required:
+        - settlements
+        - pagination
+      properties:
+        settlements:
+          type: array
+          items:
+            $ref: '#/components/schemas/SettlementInstruction'
+          description: List of settlement instructions
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+          description: Pagination information
+        summary:
+          $ref: '#/components/schemas/SettlementSummary'
+          description: Summary statistics for the results
+
+    SettlementCreateRequest:
+      type: object
+      required:
+        - contractId
+        - cashFlowId
+        - settlementDate
+        - settlementType
+        - counterparty
+        - amount
+        - currency
+      properties:
+        contractId:
+          type: string
+          description: Contract identifier (natural key component)
+          example: "SWAP_IBM_001"
+        cashFlowId:
+          type: string
+          description: Cash flow identifier (natural key component)
+          example: "CF_001"
+        settlementDate:
+          type: string
+          format: date
+          description: Settlement date (natural key component)
+          example: "2024-01-16"
+        settlementType:
+          type: string
+          enum: [INTEREST, EQUITY, DIVIDEND, PRINCIPAL]
+          description: Settlement type (natural key component)
+          example: "INTEREST"
+        counterparty:
+          type: string
+          description: Settlement counterparty
+          example: "CLIENT_ABC"
+        amount:
+          type: number
+          format: double
+          description: Settlement amount
+          example: 525.50
+        currency:
+          type: string
+          description: Settlement currency
+          example: "USD"
+        notes:
+          type: string
+          description: Additional notes or comments
+
+    SettlementStatusUpdate:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: New settlement status
+          example: "COMPLETED"
+        actualSettlementDate:
+          type: string
+          format: date
+          description: Actual settlement date when completed
+          example: "2024-01-16"
+        settlementReference:
+          type: string
+          description: External settlement reference
+          example: "SETT_REF_001"
+        notes:
+          type: string
+          description: Additional notes or comments
+        retryReason:
+          type: string
+          description: Reason for retry
+        nextRetryDate:
+          type: string
+          format: date-time
+          description: Next retry timestamp
+        cancellationReason:
+          type: string
+          description: Reason for cancellation
+        cancelledBy:
+          type: string
+          description: User who cancelled the settlement
+
+    BulkSettlementStatusUpdate:
+      type: object
+      required:
+        - settlementIds
+        - status
+      properties:
+        settlementIds:
+          type: array
+          items:
+            type: string
+          description: List of settlement IDs to update
+          example: ["SETT_001", "SETT_002", "SETT_003"]
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: New settlement status for all
+          example: "COMPLETED"
+        actualSettlementDate:
+          type: string
+          format: date
+          description: Actual settlement date when completed
+          example: "2024-01-16"
+        settlementReference:
+          type: string
+          description: External settlement reference
+          example: "BULK_SETT_REF_001"
+        notes:
+          type: string
+          description: Additional notes or comments
+
+    BulkSettlementStatusResponse:
+      type: object
+      required:
+        - totalRequested
+        - totalUpdated
+        - results
+      properties:
+        totalRequested:
+          type: integer
+          description: Total number of settlements requested for update
+          example: 3
+        totalUpdated:
+          type: integer
+          description: Total number of settlements successfully updated
+          example: 3
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkSettlementResult'
+          description: Individual results for each settlement
+
+    BulkSettlementResult:
+      type: object
+      required:
+        - settlementId
+        - success
+      properties:
+        settlementId:
+          type: string
+          description: Settlement identifier
+          example: "SETT_001"
+        success:
+          type: boolean
+          description: Whether the update was successful
+          example: true
+        errorMessage:
+          type: string
+          description: Error message if update failed
+        updatedStatus:
+          type: string
+          enum: [PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: Final status after update
+
+    SettlementSummary:
+      type: object
+      required:
+        - totalSettlements
+        - totalAmount
+        - currency
+        - statusBreakdown
+      properties:
+        totalSettlements:
+          type: integer
+          description: Total number of settlements
+          example: 150
+        totalAmount:
+          type: number
+          format: double
+          description: Total settlement amount
+          example: 125000.75
+        currency:
+          type: string
+          description: Settlement currency
+          example: "USD"
+        statusBreakdown:
+          type: object
+          properties:
+            pending:
+              type: integer
+              description: Number of pending settlements
+              example: 25
+            processing:
+              type: integer
+              description: Number of processing settlements
+              example: 10
+            completed:
+              type: integer
+              description: Number of completed settlements
+              example: 100
+            failed:
+              type: integer
+              description: Number of failed settlements
+              example: 10
+            cancelled:
+              type: integer
+              description: Number of cancelled settlements
+              example: 5
+        typeBreakdown:
+          type: object
+          properties:
+            interest:
+              type: integer
+              description: Number of interest settlements
+              example: 80
+            equity:
+              type: integer
+              description: Number of equity settlements
+              example: 40
+            dividend:
+              type: integer
+              description: Number of dividend settlements
+              example: 20
+            principal:
+              type: integer
+              description: Number of principal settlements
+              example: 10
+        counterpartyBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              counterparty:
+                type: string
+                description: Counterparty name
+              count:
+                type: integer
+                description: Number of settlements
+              amount:
+                type: number
+                format: double
+                description: Total amount
+        dateRange:
+          $ref: '#/components/schemas/DateRange'
+          description: Date range for the summary
+
+    PaginationInfo:
+      type: object
+      required:
+        - page
+        - size
+        - totalElements
+        - totalPages
+      properties:
+        page:
+          type: integer
+          description: Current page number
+          example: 1
+        size:
+          type: integer
+          description: Page size
+          example: 100
+        totalElements:
+          type: integer
+          description: Total number of elements
+          example: 150
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 2
+        hasNext:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPrevious:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+
+    CalculationRequestsResponse:
+      type: object
+      required:
+        - calculationRequests
+        - pagination
+      properties:
+        calculationRequests:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalculationRequestInfo'
+          description: List of calculation requests
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+          description: Pagination information
+        summary:
+          type: object
+          properties:
+            totalRequests:
+              type: integer
+              description: Total number of calculation requests
+            statusBreakdown:
+              type: object
+              properties:
+                processing:
+                  type: integer
+                  description: Number of processing requests
+                completed:
+                  type: integer
+                  description: Number of completed requests
+                failed:
+                  type: integer
+                  description: Number of failed requests
+                cancelled:
+                  type: integer
+                  description: Number of cancelled requests
+
+    CalculationRequestInfo:
+      type: object
+      required:
+        - requestId
+        - contractId
+        - calculationType
+        - fromDate
+        - toDate
+        - status
+      properties:
+        requestId:
+          type: string
+          description: Unique calculation request identifier
+          example: "CF_REQ_001"
+        contractId:
+          type: string
+          description: Contract identifier
+          example: "SWAP_IBM_001"
+        calculationType:
+          type: string
+          enum: [REAL_TIME_PROCESSING, INCREMENTAL_UPDATE, HISTORICAL_RECALCULATION]
+          description: Type of calculation
+          example: "HISTORICAL_RECALCULATION"
+        fromDate:
+          type: string
+          format: date
+          description: Start date for calculations
+          example: "2024-01-01"
+        toDate:
+          type: string
+          format: date
+          description: End date for calculations
+          example: "2024-01-15"
+        status:
+          type: string
+          enum: [PROCESSING, COMPLETED, FAILED, CANCELLED]
+          description: Calculation status
+          example: "COMPLETED"
+        progressPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Progress percentage
+          example: 100
+        errorMessage:
+          type: string
+          description: Error message if failed
+        inputDataHash:
+          type: string
+          description: Hash of input data for audit trail
+          example: "a1b2c3d4e5f6..."
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2024-01-15T10:35:00Z"
+
+    CalculationReproduction:
+      type: object
+      required:
+        - requestId
+        - originalRequest
+        - reproducedResults
+        - integrityCheck
+      properties:
+        requestId:
+          type: string
+          description: Original request identifier
+          example: "CF_REQ_001"
+        originalRequest:
+          $ref: '#/components/schemas/CashFlowRequestContent'
+          description: Original calculation request
+        reproducedResults:
+          $ref: '#/components/schemas/CashFlowResponse'
+          description: Reproduced calculation results
+        integrityCheck:
+          $ref: '#/components/schemas/IntegrityCheck'
+          description: Data integrity verification
+
+    IntegrityCheck:
+      type: object
+      required:
+        - inputDataHash
+        - hashMatch
+        - resultMatch
+      properties:
+        inputDataHash:
+          type: string
+          description: Hash of input data
+          example: "a1b2c3d4e5f6..."
+        hashMatch:
+          type: boolean
+          description: Whether input data hash matches
+          example: true
+        resultMatch:
+          type: boolean
+          description: Whether reproduced results match original
+          example: true
+        differences:
+          type: array
+          items:
+            type: string
+          description: List of differences if any
+          example: []
+
+    ErrorResponse:
+      type: object
+      required:
+        - errorCode
+        - message
+        - timestamp
+      properties:
+        errorCode:
+          type: string
+          description: Error code
+          example: "CALCULATION_ERROR"
+        message:
+          type: string
+          description: Error message
+          example: "Calculation failed due to invalid market data"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error timestamp
+          example: "2024-01-15T10:30:00Z"
+        details:
+          type: object
+          description: Additional error details
+        requestId:
+          type: string
+          description: Associated request identifier
+          example: "CF_REQ_001"
