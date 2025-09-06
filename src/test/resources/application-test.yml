@@ -1,19 +1,16 @@
+# Test configuration for Cash Flow Management Service
 spring:
   application:
     name: cash-flow-management-service-test
   
   datasource:
-    # Will be overridden by TestContainers for SQL Server
-    url: jdbc:sqlserver://localhost:1434;databaseName=cashflow_test;encrypt=true;trustServerCertificate=true
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     username: sa
-    password: TestPassword123!
-    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+    password: 
+    driver-class-name: org.h2.Driver
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 5
+      minimum-idle: 1
   
   jpa:
     hibernate:
@@ -21,73 +18,29 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.SQLServerDialect
-        format_sql: true
-        jdbc:
-          batch_size: 20
-          fetch_size: 20
-        order_inserts: true
-        order_updates: true
-        batch_versioned_data: true
+        dialect: org.hibernate.dialect.H2Dialect
   
   liquibase:
-    enabled: true
-    change-log: classpath:db/changelog/db.changelog-master.xml
-    contexts: test
+    enabled: false
   
-  cache:
-    type: redis
-    redis:
-      host: localhost
-      port: 6380
-      password: 
-      database: 1
-      timeout: 2000ms
-      lettuce:
-        pool:
-          max-active: 10
-          max-idle: 5
-          min-idle: 2
-          max-wait: -1ms
-  
-  kafka:
-    bootstrap-servers: localhost:9094
-    consumer:
-      group-id: cash-flow-service-test-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      properties:
-        spring.json.trusted.packages: "*"
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.apache.kafka.common.serialization.StringSerializer
-      properties:
-        spring.json.add.type.headers: false
-        spring.json.type.mapping: cashflow:com.financial.cashflow.domain.event.CashFlowEvent,settlement:com.financial.cashflow.domain.event.SettlementEvent
+  sql:
+    init:
+      mode: never
 
 server:
-  port: 0  # Random port for testing
+  port: 0  # Random port for tests
+
+logging:
+  level:
+    com.financial.cashflow: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,mappings
-      base-path: /actuator
+        include: health,info
   endpoint:
     health:
-      show-details: when-authorized
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-
-logging:
-  level:
-    com.financial.cashflow: DEBUG
-    org.springframework.kafka: WARN
-    org.hibernate.SQL: WARN
-    org.springframework.cache: DEBUG
-  pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} -- %msg%n"
+      show-details: never

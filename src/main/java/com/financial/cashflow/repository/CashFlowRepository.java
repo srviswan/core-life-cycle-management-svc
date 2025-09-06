@@ -1,150 +1,162 @@
 package com.financial.cashflow.repository;
 
-import com.financial.cashflow.entity.CashFlow;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import com.financial.cashflow.model.CashFlowResponse;
+import com.financial.cashflow.model.SettlementInstruction;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
- * Repository for CashFlow entity operations.
+ * Repository for Cash Flow data access using JDBC Template
  */
 @Repository
-public interface CashFlowRepository extends JpaRepository<CashFlow, Long> {
-
+@Slf4j
+@RequiredArgsConstructor
+public class CashFlowRepository {
+    
+    private final JdbcTemplate jdbcTemplate;
+    private final CashFlowRowMapper cashFlowRowMapper;
+    
     /**
-     * Find cash flows by contract ID.
+     * Save all cash flows in batch
      */
-    List<CashFlow> findByContractId(String contractId);
-
+    public void saveAll(List<CashFlowResponse.CashFlow> cashFlows) {
+        if (cashFlows.isEmpty()) {
+            return;
+        }
+        
+        String sql = """
+            INSERT INTO cash_flows (
+                cash_flow_id, request_id, contract_id, position_id, lot_id, 
+                schedule_id, calculation_date, cash_flow_type, equity_leg_amount,
+                interest_leg_amount, total_amount, currency, state,
+                equity_unrealized_pnl, equity_realized_pnl, equity_total_pnl,
+                equity_dividend_amount, equity_withholding_tax, equity_net_dividend,
+                interest_accrued_amount, interest_rate, interest_notional_amount,
+                created_timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """;
+        
+        jdbcTemplate.batchUpdate(sql, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                CashFlowResponse.CashFlow cashFlow = cashFlows.get(i);
+                ps.setString(1, cashFlow.getCashFlowId());
+                ps.setString(2, cashFlow.getRequestId());
+                ps.setString(3, cashFlow.getContractId());
+                ps.setString(4, cashFlow.getPositionId());
+                ps.setString(5, cashFlow.getLotId());
+                ps.setString(6, cashFlow.getScheduleId());
+                ps.setDate(7, Date.valueOf(cashFlow.getCalculationDate()));
+                ps.setString(8, cashFlow.getCashFlowType());
+                ps.setBigDecimal(9, cashFlow.getEquityLegAmount());
+                ps.setBigDecimal(10, cashFlow.getInterestLegAmount());
+                ps.setBigDecimal(11, cashFlow.getTotalAmount());
+                ps.setString(12, cashFlow.getCurrency());
+                ps.setString(13, cashFlow.getState());
+                ps.setBigDecimal(14, cashFlow.getEquityUnrealizedPnl());
+                ps.setBigDecimal(15, cashFlow.getEquityRealizedPnl());
+                ps.setBigDecimal(16, cashFlow.getEquityTotalPnl());
+                ps.setBigDecimal(17, cashFlow.getEquityDividendAmount());
+                ps.setBigDecimal(18, cashFlow.getEquityWithholdingTax());
+                ps.setBigDecimal(19, cashFlow.getEquityNetDividend());
+                ps.setBigDecimal(20, cashFlow.getInterestAccruedAmount());
+                ps.setBigDecimal(21, cashFlow.getInterestRate());
+                ps.setBigDecimal(22, cashFlow.getInterestNotionalAmount());
+                ps.setTimestamp(23, java.sql.Timestamp.valueOf(cashFlow.getCreatedTimestamp()));
+            }
+            
+            @Override
+            public int getBatchSize() {
+                return cashFlows.size();
+            }
+        });
+        
+        log.info("Saved {} cash flows to database", cashFlows.size());
+    }
+    
     /**
-     * Find cash flows by contract ID with pagination.
+     * Find cash flows by contract and date range
      */
-    Page<CashFlow> findByContractId(String contractId, Pageable pageable);
-
+    public List<CashFlowResponse.CashFlow> findByContractIdAndDateRange(String contractId, 
+                                                                       LocalDate fromDate, 
+                                                                       LocalDate toDate, 
+                                                                       String cashFlowType, 
+                                                                       String state) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT * FROM cash_flows 
+            WHERE contract_id = ? 
+            AND calculation_date BETWEEN ? AND ?
+            """);
+        
+        List<Object> params = new ArrayList<>();
+        params.add(contractId);
+        params.add(fromDate);
+        params.add(toDate);
+        
+        if (cashFlowType != null) {
+            sql.append(" AND cash_flow_type = ?");
+            params.add(cashFlowType);
+        }
+        
+        if (state != null) {
+            sql.append(" AND state = ?");
+            params.add(state);
+        }
+        
+        sql.append(" ORDER BY calculation_date");
+        
+        return jdbcTemplate.query(sql.toString(), cashFlowRowMapper, params.toArray());
+    }
+    
     /**
-     * Find cash flows by contract ID and date range.
+     * Find pending settlements
      */
-    @Query("SELECT cf FROM CashFlow cf WHERE cf.contractId = :contractId " +
-           "AND cf.cashFlowDate BETWEEN :fromDate AND :toDate " +
-           "ORDER BY cf.cashFlowDate")
-    List<CashFlow> findByContractIdAndDateRange(
-        @Param("contractId") String contractId,
-        @Param("fromDate") LocalDate fromDate,
-        @Param("toDate") LocalDate toDate);
-
+    public List<SettlementInstruction> findPendingSettlements(String counterparty, String currency) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT * FROM settlement_instructions 
+            WHERE status = 'PENDING'
+            """);
+        
+        List<Object> params = new ArrayList<>();
+        
+        if (counterparty != null) {
+            sql.append(" AND counterparty = ?");
+            params.add(counterparty);
+        }
+        
+        if (currency != null) {
+            sql.append(" AND currency = ?");
+            params.add(currency);
+        }
+        
+        sql.append(" ORDER BY settlement_date");
+        
+        return jdbcTemplate.query(sql.toString(), new SettlementInstructionRowMapper(), params.toArray());
+    }
+    
     /**
-     * Find cash flows by contract ID, date range, and type.
+     * Get cash flow count by contract
      */
-    @Query("SELECT cf FROM CashFlow cf WHERE cf.contractId = :contractId " +
-           "AND cf.cashFlowDate BETWEEN :fromDate AND :toDate " +
-           "AND cf.cashFlowType = :cashFlowType " +
-           "ORDER BY cf.cashFlowDate")
-    List<CashFlow> findByContractIdAndDateRangeAndType(
-        @Param("contractId") String contractId,
-        @Param("fromDate") LocalDate fromDate,
-        @Param("toDate") LocalDate toDate,
-        @Param("cashFlowType") String cashFlowType);
-
+    public int getCashFlowCountByContract(String contractId) {
+        String sql = "SELECT COUNT(*) FROM cash_flows WHERE contract_id = ?";
+        return jdbcTemplate.queryForObject(sql, Integer.class, contractId);
+    }
+    
     /**
-     * Find cash flows by status.
+     * Delete cash flows by request ID
      */
-    List<CashFlow> findByStatus(String status);
-
-    /**
-     * Find cash flows by status with pagination.
-     */
-    Page<CashFlow> findByStatus(String status, Pageable pageable);
-
-    /**
-     * Find cash flows by lot ID.
-     */
-    List<CashFlow> findByLotId(String lotId);
-
-    /**
-     * Find cash flows by request ID.
-     */
-    List<CashFlow> findByRequestId(String requestId);
-
-    /**
-     * Find cash flows by calculation ID.
-     */
-    List<CashFlow> findByCalculationId(String calculationId);
-
-    /**
-     * Find cash flow by cash flow ID.
-     */
-    Optional<CashFlow> findByCashFlowId(String cashFlowId);
-
-    /**
-     * Find cash flows by date range.
-     */
-    @Query("SELECT cf FROM CashFlow cf WHERE cf.cashFlowDate BETWEEN :fromDate AND :toDate " +
-           "ORDER BY cf.cashFlowDate, cf.contractId")
-    List<CashFlow> findByDateRange(
-        @Param("fromDate") LocalDate fromDate,
-        @Param("toDate") LocalDate toDate);
-
-    /**
-     * Find cash flows by date range with pagination.
-     */
-    @Query("SELECT cf FROM CashFlow cf WHERE cf.cashFlowDate BETWEEN :fromDate AND :toDate " +
-           "ORDER BY cf.cashFlowDate, cf.contractId")
-    Page<CashFlow> findByDateRange(
-        @Param("fromDate") LocalDate fromDate,
-        @Param("toDate") LocalDate toDate,
-        Pageable pageable);
-
-    /**
-     * Count cash flows by contract ID and status.
-     */
-    long countByContractIdAndStatus(String contractId, String status);
-
-    /**
-     * Sum amounts by contract ID and cash flow type.
-     */
-    @Query("SELECT SUM(cf.amount) FROM CashFlow cf WHERE cf.contractId = :contractId " +
-           "AND cf.cashFlowType = :cashFlowType")
-    java.math.BigDecimal sumAmountByContractIdAndType(
-        @Param("contractId") String contractId,
-        @Param("cashFlowType") String cashFlowType);
-
-    /**
-     * Sum amounts by contract ID and date range.
-     */
-    @Query("SELECT SUM(cf.amount) FROM CashFlow cf WHERE cf.contractId = :contractId " +
-           "AND cf.cashFlowDate BETWEEN :fromDate AND :toDate")
-    java.math.BigDecimal sumAmountByContractIdAndDateRange(
-        @Param("contractId") String contractId,
-        @Param("fromDate") LocalDate fromDate,
-        @Param("toDate") LocalDate toDate);
-
-    /**
-     * Find cash flows for settlement (REALIZED_UNSETTLED status).
-     */
-    @Query("SELECT cf FROM CashFlow cf WHERE cf.status = 'REALIZED_UNSETTLED' " +
-           "AND cf.settlementDate <= :settlementDate " +
-           "ORDER BY cf.settlementDate, cf.cashFlowId")
-    List<CashFlow> findPendingSettlements(@Param("settlementDate") LocalDate settlementDate);
-
-    /**
-     * Delete cash flows by request ID.
-     */
-    void deleteByRequestId(String requestId);
-
-    /**
-     * Delete cash flows by calculation ID.
-     */
-    void deleteByCalculationId(String calculationId);
-
-    /**
-     * Check if cash flow exists by cash flow ID.
-     */
-    boolean existsByCashFlowId(String cashFlowId);
+    public int deleteByRequestId(String requestId) {
+        String sql = "DELETE FROM cash_flows WHERE request_id = ?";
+        return jdbcTemplate.update(sql, requestId);
+    }
 }
