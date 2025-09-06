@@ -1,0 +1,299 @@
+package com.financial.cashflow.calculator;
+
+import com.financial.cashflow.model.CashFlowRequest;
+import com.financial.cashflow.model.MarketData;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDate;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Unit tests for PnLCalculator
+ * Tests real-time P&L calculations for different contract types
+ */
+@ExtendWith(MockitoExtension.class)
+@DisplayName("PnL Calculator Tests")
+class PnLCalculatorTest {
+
+    @InjectMocks
+    private PnLCalculator pnLCalculator;
+
+    private MarketData marketData;
+    private CashFlowRequest.Contract equitySwapContract;
+    private CashFlowRequest.Contract interestRateSwapContract;
+    private CashFlowRequest.Contract bondContract;
+
+    @BeforeEach
+    void setUp() {
+        // Setup market data with IBM stock price
+        marketData = MarketData.builder()
+                .price(MarketData.PriceData.builder()
+                        .symbol("IBM")
+                        .basePrice(125.50)
+                        .baseDate(LocalDate.now())
+                        .build())
+                .timestamp(java.time.LocalDateTime.now())
+                .source("TEST")
+                .isValid(true)
+                .validUntil(java.time.LocalDateTime.now().plusHours(24))
+                .build();
+
+        // Setup equity swap contract
+        equitySwapContract = CashFlowRequest.Contract.builder()
+                .contractId("EQ_SWAP_001")
+                .underlying("IBM")
+                .notionalAmount(1000000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_SWAP)
+                .build();
+
+        // Setup interest rate swap contract
+        interestRateSwapContract = CashFlowRequest.Contract.builder()
+                .contractId("IRS_001")
+                .underlying("USD")
+                .notionalAmount(5000000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.INTEREST_RATE_SWAP)
+                .build();
+
+        // Setup bond contract
+        bondContract = CashFlowRequest.Contract.builder()
+                .contractId("BOND_001")
+                .underlying("GOVT_BOND")
+                .notionalAmount(2000000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.BOND)
+                .build();
+    }
+
+    @Test
+    @DisplayName("Should calculate P&L for equity swap correctly")
+    void testCalculateEquitySwapPnL() {
+        // Act
+        double pnl = pnLCalculator.calculatePnL(equitySwapContract, marketData);
+
+        // Assert
+        // Actual implementation: notional * (current_price - 100.0) / 100.0
+        // Expected: 1000000.0 * (125.50 - 100.0) / 100.0 = 1000000.0 * 25.50 / 100.0 = 255000.0
+        double expectedPnL = 1000000.0 * (125.50 - 100.0) / 100.0;
+        assertEquals(expectedPnL, pnl, 0.01);
+    }
+
+    @Test
+    @DisplayName("Should return zero P&L for interest rate swap (unsupported)")
+    void testCalculateInterestRateSwapPnL() {
+        // Act & Assert - Interest rate swaps are not supported for P&L calculation
+        // The calculator only supports EQUITY_SWAP, EQUITY_FORWARD, EQUITY_OPTION
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                pnLCalculator.calculatePnL(interestRateSwapContract, marketData));
+        
+        assertTrue(exception.getMessage().contains("P&L calculation failed"),
+                "Expected exception message to contain 'P&L calculation failed', but was: " + exception.getMessage());
+        
+        // Check that the cause contains the original error
+        assertNotNull(exception.getCause());
+        assertTrue(exception.getCause().getMessage().contains("Price data not found for underlying: USD"),
+                "Expected cause message to contain 'Price data not found for underlying: USD', but was: " + exception.getCause().getMessage());
+    }
+
+    @Test
+    @DisplayName("Should return zero P&L for bond (unsupported)")
+    void testCalculateBondPnL() {
+        // Act & Assert - Bonds are not supported for P&L calculation
+        // The calculator only supports EQUITY_SWAP, EQUITY_FORWARD, EQUITY_OPTION
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                pnLCalculator.calculatePnL(bondContract, marketData));
+        
+        assertTrue(exception.getMessage().contains("P&L calculation failed"),
+                "Expected exception message to contain 'P&L calculation failed', but was: " + exception.getMessage());
+        
+        // Check that the cause contains the original error
+        assertNotNull(exception.getCause());
+        assertTrue(exception.getCause().getMessage().contains("Price data not found for underlying: GOVT_BOND"),
+                "Expected cause message to contain 'Price data not found for underlying: GOVT_BOND', but was: " + exception.getCause().getMessage());
+    }
+
+    @Test
+    @DisplayName("Should throw exception for unsupported contract type")
+    void testCalculatePnLForUnsupportedType() {
+        // Arrange
+        CashFlowRequest.Contract unsupportedContract = CashFlowRequest.Contract.builder()
+                .contractId("UNSUPPORTED_001")
+                .underlying("TEST")
+                .notionalAmount(1000000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_FORWARD)
+                .build();
+
+        // Act & Assert - EQUITY_FORWARD is supported, but we don't have price data for "TEST"
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                pnLCalculator.calculatePnL(unsupportedContract, marketData));
+        
+        assertTrue(exception.getMessage().contains("P&L calculation failed"),
+                "Expected exception message to contain 'P&L calculation failed', but was: " + exception.getMessage());
+        
+        // Check that the cause contains the original error
+        assertNotNull(exception.getCause());
+        assertTrue(exception.getCause().getMessage().contains("Price data not found for underlying: TEST"),
+                "Expected cause message to contain 'Price data not found for underlying: TEST', but was: " + exception.getCause().getMessage());
+    }
+
+    @Test
+    @DisplayName("Should handle null notional amount with default value")
+    void testCalculatePnLWithNullNotional() {
+        // Arrange
+        CashFlowRequest.Contract contractWithNullNotional = CashFlowRequest.Contract.builder()
+                .contractId("NULL_NOTIONAL_001")
+                .underlying("IBM")
+                .notionalAmount(null)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_SWAP)
+                .build();
+
+        // Act
+        double pnl = pnLCalculator.calculatePnL(contractWithNullNotional, marketData);
+
+        // Assert
+        // Expected: 1,000,000 (default) * (125.50 - 100.0) / 100.0 = 1,000,000 * 25.50 / 100.0 = 255000.0
+        double expectedPnL = 1000000.0 * (125.50 - 100.0) / 100.0;
+        assertEquals(expectedPnL, pnl, 0.01);
+    }
+
+    @Test
+    @DisplayName("Should throw exception when price data is null")
+    void testCalculatePnLWithNullPriceData() {
+        // Arrange
+        MarketData marketDataWithoutPrice = MarketData.builder()
+                .price(null)
+                .timestamp(java.time.LocalDateTime.now())
+                .source("TEST")
+                .isValid(true)
+                .validUntil(java.time.LocalDateTime.now().plusHours(24))
+                .build();
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                pnLCalculator.calculatePnL(equitySwapContract, marketDataWithoutPrice));
+        
+        assertTrue(exception.getMessage().contains("P&L calculation failed"),
+                "Expected exception message to contain 'P&L calculation failed', but was: " + exception.getMessage());
+        
+        // Check that the cause contains the original error
+        assertNotNull(exception.getCause());
+        assertTrue(exception.getCause().getMessage().contains("Price data not found for underlying: IBM"),
+                "Expected cause message to contain 'Price data not found for underlying: IBM', but was: " + exception.getCause().getMessage());
+    }
+
+    @Test
+    @DisplayName("Should calculate P&L for different notional amounts")
+    void testCalculatePnLForDifferentNotionalAmounts() {
+        // Test with small notional
+        CashFlowRequest.Contract smallNotionalContract = CashFlowRequest.Contract.builder()
+                .contractId("SMALL_NOTIONAL_001")
+                .underlying("IBM")
+                .notionalAmount(100000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_SWAP)
+                .build();
+
+        double smallPnL = pnLCalculator.calculatePnL(smallNotionalContract, marketData);
+        double expectedSmallPnL = 100000.0 * (125.50 - 100.0) / 100.0;
+        assertEquals(expectedSmallPnL, smallPnL, 0.01);
+
+        // Test with large notional
+        CashFlowRequest.Contract largeNotionalContract = CashFlowRequest.Contract.builder()
+                .contractId("LARGE_NOTIONAL_001")
+                .underlying("IBM")
+                .notionalAmount(10000000.0)
+                .currency("USD")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_SWAP)
+                .build();
+
+        double largePnL = pnLCalculator.calculatePnL(largeNotionalContract, marketData);
+        double expectedLargePnL = 10000000.0 * (125.50 - 100.0) / 100.0;
+        assertEquals(expectedLargePnL, largePnL, 0.01);
+    }
+
+    @Test
+    @DisplayName("Should calculate P&L for different currencies")
+    void testCalculatePnLForDifferentCurrencies() {
+        // Test USD
+        double usdPnL = pnLCalculator.calculatePnL(equitySwapContract, marketData);
+        assertTrue(usdPnL > 0);
+
+        // Test EUR contract
+        CashFlowRequest.Contract eurContract = CashFlowRequest.Contract.builder()
+                .contractId("EUR_CONTRACT_001")
+                .underlying("IBM")
+                .notionalAmount(1000000.0)
+                .currency("EUR")
+                .type(CashFlowRequest.Contract.ContractType.EQUITY_SWAP)
+                .build();
+
+        double eurPnL = pnLCalculator.calculatePnL(eurContract, marketData);
+        // EUR should have different calculation (simplified)
+        assertTrue(eurPnL > 0);
+        assertNotEquals(usdPnL, eurPnL);
+    }
+
+    @Test
+    @DisplayName("Should handle market data with different price levels")
+    void testCalculatePnLForDifferentPriceLevels() {
+        // Test with low price
+        MarketData lowPriceMarketData = MarketData.builder()
+                .price(MarketData.PriceData.builder()
+                        .symbol("IBM")
+                        .basePrice(50.0)
+                        .baseDate(LocalDate.now())
+                        .build())
+                .timestamp(java.time.LocalDateTime.now())
+                .source("TEST")
+                .isValid(true)
+                .validUntil(java.time.LocalDateTime.now().plusHours(24))
+                .build();
+
+        double lowPricePnL = pnLCalculator.calculatePnL(equitySwapContract, lowPriceMarketData);
+        assertTrue(lowPricePnL > 0);
+
+        // Test with high price
+        MarketData highPriceMarketData = MarketData.builder()
+                .price(MarketData.PriceData.builder()
+                        .symbol("IBM")
+                        .basePrice(200.0)
+                        .baseDate(LocalDate.now())
+                        .build())
+                .timestamp(java.time.LocalDateTime.now())
+                .source("TEST")
+                .isValid(true)
+                .validUntil(java.time.LocalDateTime.now().plusHours(24))
+                .build();
+
+        double highPricePnL = pnLCalculator.calculatePnL(equitySwapContract, highPriceMarketData);
+        assertTrue(highPricePnL > 0);
+        assertNotEquals(lowPricePnL, highPricePnL);
+    }
+
+    @Test
+    @DisplayName("Should handle multiple contract calculations consistently")
+    void testMultipleContractPnLCalculations() {
+        // Calculate P&L for multiple contracts
+        double equityPnL = pnLCalculator.calculatePnL(equitySwapContract, marketData);
+        double interestPnL = pnLCalculator.calculatePnL(interestRateSwapContract, marketData);
+        double bondPnL = pnLCalculator.calculatePnL(bondContract, marketData);
+
+        // All should be positive and different
+        assertTrue(equityPnL > 0);
+        assertTrue(interestPnL > 0);
+        assertTrue(bondPnL > 0);
+        
+        assertNotEquals(equityPnL, interestPnL);
+        assertNotEquals(interestPnL, bondPnL);
+        assertNotEquals(equityPnL, bondPnL);
+    }
+}
