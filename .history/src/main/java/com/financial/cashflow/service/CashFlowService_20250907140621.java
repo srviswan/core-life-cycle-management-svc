@@ -1,0 +1,280 @@
+package com.financial.cashflow.service;
+
+import com.financial.cashflow.exception.CashFlowCalculationException;
+import com.financial.cashflow.exception.DataPersistenceException;
+import com.financial.cashflow.exception.DataRetrievalException;
+import com.financial.cashflow.exception.MarketDataException;
+import com.financial.cashflow.model.CashFlowRequest;
+import com.financial.cashflow.model.CashFlowResponse;
+import com.financial.cashflow.model.MarketData;
+import com.financial.cashflow.model.SettlementInstruction;
+import com.financial.cashflow.repository.CashFlowRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+
+/**
+ * Service layer for Cash Flow Management
+ * Uses virtual threads for I/O operations and platform threads for CPU work
+ */
+@Service
+@Slf4j
+@RequiredArgsConstructor
+public class CashFlowService {
+    
+    private final CalculationEngine calculationEngine;
+    private final MarketDataService marketDataService;
+    private final CashFlowRepository cashFlowRepository;
+    private final CalculationStatusService statusService;
+    
+    // Virtual threads for I/O operations (market data, database)
+    private final ExecutorService virtualThreadExecutor = Executors.newCachedThreadPool();
+    
+    /**
+     * Calculate cash flows synchronously
+     */
+    public CashFlowResponse calculate(CashFlowRequest request) {
+        long startTime = System.currentTimeMillis();
+        log.info("Starting calculation for request: {}", request.getRequestId());
+        
+        try {
+            // Load market data using virtual threads for I/O
+            MarketData marketData = loadMarketDataAsync(request);
+            log.info("Market data loaded in {}ms", System.currentTimeMillis() - startTime);
+            
+            // Perform calculations using platform threads for CPU work
+            log.info("About to call calculationEngine.calculate with request: {}", request.getRequestId());
+            CashFlowResponse response = calculationEngine.calculate(request, marketData);
+            log.info("calculationEngine.calculate returned response with {} contract results", 
+                response.getContractResults() != null ? response.getContractResults().size() : 0);
+            log.info("Calculation completed in {}ms", System.currentTimeMillis() - startTime);
+            
+            // Save results
+            saveCashFlows(response);
+            log.info("Results saved in {}ms", System.currentTimeMillis() - startTime);
+            
+            return response;
+        } catch (MarketDataException e) {
+            log.error("Market data error for request: {}", request.getRequestId(), e);
+            throw e; // Let MarketDataException propagate to be handled by GlobalExceptionHandler
+        } catch (Exception e) {
+            log.error("Calculation failed for request: {}", request.getRequestId(), e);
+            throw new CashFlowCalculationException("Calculation failed", e);
+        }
+    }
+    
+    /**
+     * Calculate cash flows in real-time (optimized for speed)
+     */
+    public CashFlowResponse calculateRealTime(CashFlowRequest request) {
+        long startTime = System.currentTimeMillis();
+        log.info("Starting real-time calculation for request: {}", request.getRequestId());
+        
+        try {
+            // For real-time, use direct execution for speed
+            MarketData marketData = marketDataService.loadMarketData(request);
+            CashFlowResponse response = calculationEngine.calculateRealTime(request, marketData);
+            
+            log.info("Real-time calculation completed in {}ms", System.currentTimeMillis() - startTime);
+            return response;
+        } catch (MarketDataException e) {
+            log.error("Market data error for real-time request: {}", request.getRequestId(), e);
+            throw e; // Let MarketDataException propagate to be handled by GlobalExceptionHandler
+        } catch (Exception e) {
+            log.error("Real-time calculation failed for request: {}", request.getRequestId(), e);
+            throw new CashFlowCalculationException("Real-time calculation failed", e);
+        }
+    }
+    
+    /**
+     * Start historical calculation asynchronously
+     */
+    public String calculateHistoricalAsync(CashFlowRequest request) {
+        String statusId = UUID.randomUUID().toString();
+        
+        // Start async processing
+        CompletableFuture.runAsync(() -> {
+            try {
+                statusService.updateStatus(statusId, "PROCESSING", 0);
+                
+                long startTime = System.currentTimeMillis();
+                log.info("Starting historical calculation for request: {}", request.getRequestId());
+                
+                // Load market data
+                MarketData marketData = loadMarketDataAsync(request);
+                log.info("Market data loaded in {}ms", System.currentTimeMillis() - startTime);
+                
+                // Perform historical calculation
+                CashFlowResponse response = calculationEngine.calculateHistorical(request, marketData);
+                log.info("Historical calculation completed in {}ms", System.currentTimeMillis() - startTime);
+                
+                // Save results
+                saveCashFlows(response);
+                
+                statusService.updateStatus(statusId, "COMPLETED", 100);
+                log.info("Historical calculation completed successfully for request: {}", request.getRequestId());
+                
+            } catch (Exception e) {
+                log.error("Historical calculation failed for request: {}", request.getRequestId(), e);
+                statusService.updateStatus(statusId, "FAILED", 0, e.getMessage());
+            }
+        }, virtualThreadExecutor);
+        
+        return statusId;
+    }
+    
+    /**
+     * Load market data asynchronously using virtual threads
+     */
+    private MarketData loadMarketDataAsync(CashFlowRequest request) {
+        try {
+            return virtualThreadExecutor.submit(() -> marketDataService.loadMarketData(request)).get();
+        } catch (Exception e) {
+            log.error("Failed to load market data", e);
+            // Unwrap ExecutionException to get the original MarketDataException
+            if (e instanceof java.util.concurrent.ExecutionException && e.getCause() instanceof MarketDataException) {
+                throw (MarketDataException) e.getCause();
+            }
+            throw new MarketDataException("Failed to load market data", e);
+        }
+    }
+    
+    /**
+     * Save cash flows to database
+     */
+    private void saveCashFlows(CashFlowResponse response) {
+        try {
+            // Collect all lot-level cash flows from contract results
+            List<CashFlowResponse.CashFlow> allCashFlows = new ArrayList<>();
+            
+            if (response.getContractResults() != null) {
+                for (CashFlowResponse.ContractResult contractResult : response.getContractResults()) {
+                    if (contractResult.getCashFlows() != null) {
+                        allCashFlows.addAll(contractResult.getCashFlows());
+                    }
+                }
+            }
+            
+            // Also include any top-level cash flows (for backward compatibility)
+            if (response.getCashFlows() != null) {
+                allCashFlows.addAll(response.getCashFlows());
+            }
+            
+            if (!allCashFlows.isEmpty()) {
+                log.info("Saving {} lot-level cash flows to database", allCashFlows.size());
+                cashFlowRepository.saveAll(allCashFlows);
+            } else {
+                log.warn("No cash flows to save for request: {}", response.getRequestId());
+            }
+        } catch (Exception e) {
+            log.error("Failed to save cash flows", e);
+            throw new DataPersistenceException("Failed to save cash flows", e);
+        }
+    }
+    
+    /**
+     * Get cash flows by contract
+     */
+    public List<CashFlowResponse.CashFlow> getCashFlowsByContract(String contractId, 
+                                                                java.time.LocalDate fromDate, 
+                                                                java.time.LocalDate toDate, 
+                                                                String cashFlowType, 
+                                                                String state) {
+        try {
+            return cashFlowRepository.findByContractIdAndDateRange(contractId, fromDate, toDate, cashFlowType, state);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for contract: {}", contractId, e);
+            throw new DataRetrievalException("Failed to get cash flows", e);
+        }
+    }
+    
+    /**
+     * Get pending settlements
+     */
+    public List<SettlementInstruction> getPendingSettlements(String counterparty, String currency) {
+        try {
+            return cashFlowRepository.findPendingSettlements(counterparty, currency);
+        } catch (Exception e) {
+            log.error("Failed to get pending settlements", e);
+            throw new DataRetrievalException("Failed to get pending settlements", e);
+        }
+    }
+    
+    // =====================================================
+    // CONSOLIDATION METHODS - LOT TO POSITION TO CONTRACT
+    // =====================================================
+    
+    /**
+     * Get cash flows consolidated by lot (most granular level)
+     */
+    public List<CashFlowResponse.CashFlow> getCashFlowsByLot(String lotId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flows for lot: {} from {} to {}", lotId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowsByLot(lotId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for lot: {}", lotId, e);
+            throw new DataRetrievalException("Failed to get cash flows for lot", e);
+        }
+    }
+    
+    /**
+     * Get cash flows consolidated by position
+     */
+    public List<CashFlowResponse.CashFlow> getCashFlowsByPosition(String positionId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flows for position: {} from {} to {}", positionId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowsByPosition(positionId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for position: {}", positionId, e);
+            throw new DataRetrievalException("Failed to get cash flows for position", e);
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by position (sum of all lots in position)
+     */
+    public com.financial.cashflow.model.CashFlowAggregation getAggregatedCashFlowsByPosition(String positionId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting aggregated cash flows for position: {} from {} to {}", positionId, fromDate, toDate);
+            return cashFlowRepository.getAggregatedCashFlowsByPosition(positionId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for position: {}", positionId, e);
+            throw new DataRetrievalException("Failed to get aggregated cash flows for position", e);
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by contract (sum of all positions in contract)
+     */
+    public com.financial.cashflow.model.CashFlowAggregation getAggregatedCashFlowsByContract(String contractId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting aggregated cash flows for contract: {} from {} to {}", contractId, fromDate, toDate);
+            return cashFlowRepository.getAggregatedCashFlowsByContract(contractId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for contract: {}", contractId, e);
+            throw new DataRetrievalException("Failed to get aggregated cash flows for contract", e);
+        }
+    }
+    
+    /**
+     * Get hierarchical cash flow breakdown (contract -> position -> lot)
+     */
+    public List<com.financial.cashflow.model.CashFlowHierarchy> getCashFlowHierarchy(String contractId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flow hierarchy for contract: {} from {} to {}", contractId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowHierarchy(contractId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flow hierarchy for contract: {}", contractId, e);
+            throw new DataRetrievalException("Failed to get cash flow hierarchy", e);
+        }
+    }
+    
+}

@@ -1,0 +1,126 @@
+{
+  "calculationDate": "2024-01-15",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "contractPositions": [
+    {
+      "contractId": "EQ-001",
+      "underlying": "AAPL",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 1000000.0,
+      "positions": [
+        {
+          "positionId": "POS-001",
+          "product": "EQUITY_LEG",
+          "underlying": "AAPL",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-001",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 1000,
+              "costPrice": 150.50,
+              "costDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-002",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 500,
+              "costPrice": 152.25,
+              "costDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-003",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 750,
+              "costPrice": 148.75,
+              "costDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-004",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 2000,
+              "costPrice": 151.00,
+              "costDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-005",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 1200,
+              "costPrice": 149.50,
+              "costDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "AAPL",
+          "basePrice": 155.25,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "rates": [
+        {
+          "index": "USD",
+          "baseRate": 0.0525,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "AAPL",
+          "dividends": [
+            {
+              "exDate": "2024-01-10",
+              "amount": 0.24,
+              "currency": "USD"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

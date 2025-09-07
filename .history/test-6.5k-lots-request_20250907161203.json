@@ -1,0 +1,99 @@
+{
+  "calculationDate": "2024-01-15",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "contractPositions": [
+    {
+      "contractId": "EQ-001",
+      "product": "EQUITY",
+      "positions": [
+        {
+          "positionId": "POS-001",
+          "positionType": "LONG",
+          "lots": [
+            {
+              "lotId": "LOT-001",
+              "lotType": "TRADE",
+              "quantity": 1000,
+              "costPrice": 150.50,
+              "costDate": "2024-01-10",
+              "tradeDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-002",
+              "lotType": "TRADE",
+              "quantity": 500,
+              "costPrice": 152.25,
+              "costDate": "2024-01-11",
+              "tradeDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-003",
+              "lotType": "TRADE",
+              "quantity": 750,
+              "costPrice": 148.75,
+              "costDate": "2024-01-12",
+              "tradeDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-004",
+              "lotType": "TRADE",
+              "quantity": 2000,
+              "costPrice": 151.00,
+              "costDate": "2024-01-13",
+              "tradeDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-005",
+              "lotType": "TRADE",
+              "quantity": 1200,
+              "costPrice": 149.50,
+              "costDate": "2024-01-14",
+              "tradeDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "underlying": "AAPL"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "marketData": {
+    "securities": [
+      {
+        "symbol": "AAPL",
+        "price": 155.25,
+        "currency": "USD"
+      }
+    ],
+    "rates": [
+      {
+        "currency": "USD",
+        "rate": 0.0525,
+        "rateType": "INTEREST"
+      }
+    ],
+    "dividends": [
+      {
+        "symbol": "AAPL",
+        "amount": 0.24,
+        "exDate": "2024-01-10",
+        "paymentDate": "2024-01-15",
+        "currency": "USD",
+        "withholdingTax": {
+          "rate": 0.15,
+          "treatment": "GROSS_UP"
+        }
+      }
+    ]
+  }
+}

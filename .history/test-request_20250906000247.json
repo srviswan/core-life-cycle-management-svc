@@ -1,0 +1,66 @@
+{
+  "requestId": "TEST_REQ_001",
+  "calculationDate": "2024-01-15",
+  "dateRange": {
+    "fromDate": "2024-01-01",
+    "toDate": "2024-01-31"
+  },
+  "underlying": "IBM",
+  "index": "LIBOR_3M",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "contracts": [
+    {
+      "contractId": "SWAP_IBM_001",
+      "underlying": "IBM",
+      "index": "LIBOR_3M",
+      "notionalAmount": 1000000.0,
+      "currency": "USD",
+      "type": "EQUITY_SWAP",
+      "startDate": "2024-01-01",
+      "endDate": "2024-01-31"
+    }
+  ],
+  "lots": [
+    {
+      "lotId": "LOT_001",
+      "contractId": "SWAP_IBM_001",
+      "quantity": 1000.0,
+      "costPrice": 120.0,
+      "costDate": "2024-01-01",
+      "settlementDate": "2024-01-03"
+    }
+  ],
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "IBM",
+          "basePrice": 125.0,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "rates": [
+        {
+          "index": "LIBOR_3M",
+          "baseRate": 5.25,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "IBM",
+          "exDate": "2024-01-10",
+          "paymentDate": "2024-01-15",
+          "amount": 1.50,
+          "currency": "USD",
+          "withholdingTaxRate": 15.0,
+          "withholdingTreatment": "GROSS_UP"
+        }
+      ]
+    }
+  }
+}

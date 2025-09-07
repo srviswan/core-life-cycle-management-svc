@@ -1,0 +1,397 @@
+{
+  "calculationDate": "2024-01-15",
+  "dateRange": {
+    "fromDate": "2024-01-01",
+    "toDate": "2024-12-31"
+  },
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "contractPositions": [
+    {
+      "contractId": "EQ-001",
+      "underlying": "AAPL",
+      "index": "USD",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 1000000.0,
+      "positions": [
+        {
+          "positionId": "POS-001",
+          "product": "EQUITY_LEG",
+          "underlying": "AAPL",
+          "notionalAmount": 500000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-001",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 1000,
+              "costPrice": 150.50,
+              "costDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-002",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 500,
+              "costPrice": 152.25,
+              "costDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-003",
+              "contractId": "EQ-001",
+              "positionId": "POS-001",
+              "underlying": "AAPL",
+              "quantity": 750,
+              "costPrice": 148.75,
+              "costDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        },
+        {
+          "positionId": "POS-002",
+          "product": "INTEREST_LEG",
+          "underlying": "AAPL",
+          "notionalAmount": 500000.0,
+          "currency": "USD",
+          "type": "INTEREST_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-004",
+              "contractId": "EQ-001",
+              "positionId": "POS-002",
+              "underlying": "AAPL",
+              "quantity": 2000,
+              "costPrice": 151.00,
+              "costDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "EQ-002",
+      "underlying": "MSFT",
+      "index": "USD",
+      "type": "EQUITY_FORWARD",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 2000000.0,
+      "positions": [
+        {
+          "positionId": "POS-003",
+          "product": "EQUITY_LEG",
+          "underlying": "MSFT",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-005",
+              "contractId": "EQ-002",
+              "positionId": "POS-003",
+              "underlying": "MSFT",
+              "quantity": 1200,
+              "costPrice": 149.50,
+              "costDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-006",
+              "contractId": "EQ-002",
+              "positionId": "POS-003",
+              "underlying": "MSFT",
+              "quantity": 800,
+              "costPrice": 147.25,
+              "costDate": "2024-01-15",
+              "settlementDate": "2024-01-17",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        },
+        {
+          "positionId": "POS-004",
+          "product": "DIVIDEND_LEG",
+          "underlying": "MSFT",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "DIVIDEND_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-007",
+              "contractId": "EQ-002",
+              "positionId": "POS-004",
+              "underlying": "MSFT",
+              "quantity": 100,
+              "costPrice": 25.50,
+              "costDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "DER-001",
+      "underlying": "TSLA",
+      "index": "USD",
+      "type": "EQUITY_OPTION",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 500000.0,
+      "positions": [
+        {
+          "positionId": "POS-005",
+          "product": "EQUITY_LEG",
+          "underlying": "TSLA",
+          "notionalAmount": 500000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-008",
+              "contractId": "DER-001",
+              "positionId": "POS-005",
+              "underlying": "TSLA",
+              "quantity": 50,
+              "costPrice": 26.25,
+              "costDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "DER-002",
+      "underlying": "NVDA",
+      "index": "USD",
+      "type": "EQUITY_OPTION",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 750000.0,
+      "positions": [
+        {
+          "positionId": "POS-006",
+          "product": "EQUITY_LEG",
+          "underlying": "NVDA",
+          "notionalAmount": 750000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-009",
+              "contractId": "DER-002",
+              "positionId": "POS-006",
+              "underlying": "NVDA",
+              "quantity": 200,
+              "costPrice": 15.75,
+              "costDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "EQ-003",
+      "underlying": "AMZN",
+      "index": "USD",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 1500000.0,
+      "positions": [
+        {
+          "positionId": "POS-007",
+          "product": "EQUITY_LEG",
+          "underlying": "AMZN",
+          "notionalAmount": 750000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-010",
+              "contractId": "EQ-003",
+              "positionId": "POS-007",
+              "underlying": "AMZN",
+              "quantity": 500,
+              "costPrice": 85.25,
+              "costDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-011",
+              "contractId": "EQ-003",
+              "positionId": "POS-007",
+              "underlying": "AMZN",
+              "quantity": 300,
+              "costPrice": 87.50,
+              "costDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT-012",
+              "contractId": "EQ-003",
+              "positionId": "POS-007",
+              "underlying": "AMZN",
+              "quantity": 400,
+              "costPrice": 86.75,
+              "costDate": "2024-01-15",
+              "settlementDate": "2024-01-17",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        },
+        {
+          "positionId": "POS-008",
+          "product": "CURRENCY_LEG",
+          "underlying": "AMZN",
+          "notionalAmount": 750000.0,
+          "currency": "USD",
+          "type": "CURRENCY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT-013",
+              "contractId": "EQ-003",
+              "positionId": "POS-008",
+              "underlying": "AMZN",
+              "quantity": 100,
+              "costPrice": 1.0,
+              "costDate": "2024-01-15",
+              "settlementDate": "2024-01-17",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "AAPL",
+          "basePrice": 155.25,
+          "baseDate": "2024-01-15",
+          "changes": []
+        },
+        {
+          "symbol": "MSFT",
+          "basePrice": 420.50,
+          "baseDate": "2024-01-15",
+          "changes": []
+        },
+        {
+          "symbol": "TSLA",
+          "basePrice": 245.80,
+          "baseDate": "2024-01-15",
+          "changes": []
+        },
+        {
+          "symbol": "NVDA",
+          "basePrice": 875.25,
+          "baseDate": "2024-01-15",
+          "changes": []
+        },
+        {
+          "symbol": "AMZN",
+          "basePrice": 168.50,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "rates": [
+        {
+          "index": "USD",
+          "baseRate": 0.0525,
+          "baseDate": "2024-01-15",
+          "changes": []
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "AAPL",
+          "dividends": [
+            {
+              "exDate": "2024-01-10",
+              "amount": 0.24,
+              "currency": "USD"
+            }
+          ]
+        },
+        {
+          "symbol": "MSFT",
+          "dividends": [
+            {
+              "exDate": "2024-01-12",
+              "amount": 0.75,
+              "currency": "USD"
+            }
+          ]
+        },
+        {
+          "symbol": "AMZN",
+          "dividends": [
+            {
+              "exDate": "2024-01-15",
+              "amount": 0.00,
+              "currency": "USD"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

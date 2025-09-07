@@ -1,0 +1,194 @@
+{
+  "requestId": "TEST_160K_CONTRACTS_001",
+  "calculationDate": "2024-01-15",
+  "dateRange": {
+    "fromDate": "2024-01-01",
+    "toDate": "2024-01-31"
+  },
+  "calculationType": "REAL_TIME_PROCESSING",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "IBM",
+          "basePrice": 150.0,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "price": 152.0
+            }
+          ]
+        },
+        {
+          "symbol": "AAPL",
+          "basePrice": 180.0,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "price": 185.0
+            }
+          ]
+        },
+        {
+          "symbol": "MSFT",
+          "basePrice": 350.0,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "price": 355.0
+            }
+          ]
+        }
+      ],
+      "rates": [
+        {
+          "index": "SOFR",
+          "baseRate": 5.25,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "rate": 5.30
+            }
+          ]
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "IBM",
+          "dividends": [
+            {
+              "exDate": "2024-01-10",
+              "amount": 1.65,
+              "currency": "USD"
+            }
+          ]
+        },
+        {
+          "symbol": "AAPL",
+          "dividends": [
+            {
+              "exDate": "2024-01-12",
+              "amount": 0.24,
+              "currency": "USD"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "contractPositions": [
+    {
+      "contractId": "CONTRACT_001",
+      "underlying": "IBM",
+      "index": "SOFR",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 1000000.0,
+      "positions": [
+        {
+          "positionId": "POS_001",
+          "product": "EQUITY_LEG",
+          "underlying": "IBM",
+          "notionalAmount": 500000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_001",
+              "contractId": "CONTRACT_001",
+              "positionId": "POS_001",
+              "underlying": "IBM",
+              "quantity": 100.0,
+              "costPrice": 150.0,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-03",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT_002",
+              "contractId": "CONTRACT_001",
+              "positionId": "POS_001",
+              "underlying": "IBM",
+              "quantity": 200.0,
+              "costPrice": 151.0,
+              "costDate": "2024-01-02",
+              "settlementDate": "2024-01-04",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        },
+        {
+          "positionId": "POS_002",
+          "product": "INTEREST_LEG",
+          "underlying": "IBM",
+          "notionalAmount": 500000.0,
+          "currency": "USD",
+          "type": "INTEREST_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_003",
+              "contractId": "CONTRACT_001",
+              "positionId": "POS_002",
+              "underlying": "IBM",
+              "quantity": 500000.0,
+              "costPrice": 1.0,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-03",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "CONTRACT_002",
+      "underlying": "AAPL",
+      "index": "SOFR",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 2000000.0,
+      "positions": [
+        {
+          "positionId": "POS_003",
+          "product": "EQUITY_LEG",
+          "underlying": "AAPL",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_004",
+              "contractId": "CONTRACT_002",
+              "positionId": "POS_003",
+              "underlying": "AAPL",
+              "quantity": 500.0,
+              "costPrice": 180.0,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-03",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

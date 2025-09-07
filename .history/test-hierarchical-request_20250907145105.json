@@ -1,0 +1,128 @@
+{
+  "requestId": "HIERARCHICAL_TEST_001",
+  "calculationDate": "2024-01-15",
+  "dateRange": {
+    "fromDate": "2024-01-01",
+    "toDate": "2024-01-31"
+  },
+  "calculationType": "REAL_TIME",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "IBM",
+          "basePrice": 150.0,
+          "baseDate": "2024-01-01",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "price": 155.0
+            }
+          ]
+        }
+      ],
+      "rates": [
+        {
+          "index": "SOFR",
+          "baseRate": 5.25,
+          "baseDate": "2024-01-01",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "rate": 5.30
+            }
+          ]
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "IBM",
+          "dividends": [
+            {
+              "exDate": "2024-01-10",
+              "amount": 1.50,
+              "currency": "USD",
+              "withholdingTreatment": "GROSS_UP"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "contractPositions": [
+    {
+      "contractId": "SWAP_IBM_001",
+      "underlying": "IBM",
+      "index": "SOFR",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 2000000.0,
+      "positions": [
+        {
+          "positionId": "POS_EQUITY_001",
+          "product": "EQUITY_LEG",
+          "underlying": "IBM",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_EQUITY_001",
+              "contractId": "SWAP_IBM_001",
+              "positionId": "POS_EQUITY_001",
+              "underlying": "IBM",
+              "quantity": 1000.0,
+              "costPrice": 150.0,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            },
+            {
+              "lotId": "LOT_EQUITY_002",
+              "contractId": "SWAP_IBM_001",
+              "positionId": "POS_EQUITY_001",
+              "underlying": "IBM",
+              "quantity": 500.0,
+              "costPrice": 148.0,
+              "costDate": "2024-01-05",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        },
+        {
+          "positionId": "POS_INTEREST_001",
+          "product": "INTEREST_LEG",
+          "underlying": "SOFR",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "INTEREST_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_INTEREST_001",
+              "contractId": "SWAP_IBM_001",
+              "positionId": "POS_INTEREST_001",
+              "underlying": "SOFR",
+              "quantity": 1000000.0,
+              "costPrice": 5.25,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-15",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

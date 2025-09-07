@@ -1,0 +1,281 @@
+{
+  "calculationDate": "2024-01-15",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "contractPositions": [
+    {
+      "contractId": "EQ-001",
+      "product": "EQUITY",
+      "positions": [
+        {
+          "positionId": "POS-001",
+          "positionType": "LONG",
+          "lots": [
+            {
+              "lotId": "LOT-001",
+              "lotType": "TRADE",
+              "quantity": 1000,
+              "costPrice": 150.50,
+              "costDate": "2024-01-10",
+              "tradeDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-002",
+              "lotType": "TRADE",
+              "quantity": 500,
+              "costPrice": 152.25,
+              "costDate": "2024-01-11",
+              "tradeDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "underlying": "AAPL"
+            },
+            {
+              "lotId": "LOT-003",
+              "lotType": "TRADE",
+              "quantity": 750,
+              "costPrice": 148.75,
+              "costDate": "2024-01-12",
+              "tradeDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "underlying": "AAPL"
+            }
+          ]
+        },
+        {
+          "positionId": "POS-002",
+          "positionType": "SHORT",
+          "lots": [
+            {
+              "lotId": "LOT-004",
+              "lotType": "TRADE",
+              "quantity": 2000,
+              "costPrice": 151.00,
+              "costDate": "2024-01-13",
+              "tradeDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "underlying": "MSFT"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "EQ-002",
+      "product": "EQUITY",
+      "positions": [
+        {
+          "positionId": "POS-003",
+          "positionType": "LONG",
+          "lots": [
+            {
+              "lotId": "LOT-005",
+              "lotType": "TRADE",
+              "quantity": 1200,
+              "costPrice": 149.50,
+              "costDate": "2024-01-14",
+              "tradeDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "underlying": "GOOGL"
+            },
+            {
+              "lotId": "LOT-006",
+              "lotType": "TRADE",
+              "quantity": 800,
+              "costPrice": 147.25,
+              "costDate": "2024-01-15",
+              "tradeDate": "2024-01-15",
+              "settlementDate": "2024-01-17",
+              "underlying": "GOOGL"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "DER-001",
+      "product": "DERIVATIVE",
+      "positions": [
+        {
+          "positionId": "POS-004",
+          "positionType": "LONG",
+          "lots": [
+            {
+              "lotId": "LOT-007",
+              "lotType": "TRADE",
+              "quantity": 100,
+              "costPrice": 25.50,
+              "costDate": "2024-01-10",
+              "tradeDate": "2024-01-10",
+              "settlementDate": "2024-01-12",
+              "underlying": "TSLA"
+            },
+            {
+              "lotId": "LOT-008",
+              "lotType": "TRADE",
+              "quantity": 50,
+              "costPrice": 26.25,
+              "costDate": "2024-01-11",
+              "tradeDate": "2024-01-11",
+              "settlementDate": "2024-01-13",
+              "underlying": "TSLA"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "DER-002",
+      "product": "DERIVATIVE",
+      "positions": [
+        {
+          "positionId": "POS-005",
+          "positionType": "SHORT",
+          "lots": [
+            {
+              "lotId": "LOT-009",
+              "lotType": "TRADE",
+              "quantity": 200,
+              "costPrice": 15.75,
+              "costDate": "2024-01-12",
+              "tradeDate": "2024-01-12",
+              "settlementDate": "2024-01-14",
+              "underlying": "NVDA"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "contractId": "EQ-003",
+      "product": "EQUITY",
+      "positions": [
+        {
+          "positionId": "POS-006",
+          "positionType": "LONG",
+          "lots": [
+            {
+              "lotId": "LOT-010",
+              "lotType": "TRADE",
+              "quantity": 500,
+              "costPrice": 85.25,
+              "costDate": "2024-01-13",
+              "tradeDate": "2024-01-13",
+              "settlementDate": "2024-01-15",
+              "underlying": "AMZN"
+            },
+            {
+              "lotId": "LOT-011",
+              "lotType": "TRADE",
+              "quantity": 300,
+              "costPrice": 87.50,
+              "costDate": "2024-01-14",
+              "tradeDate": "2024-01-14",
+              "settlementDate": "2024-01-16",
+              "underlying": "AMZN"
+            },
+            {
+              "lotId": "LOT-012",
+              "lotType": "TRADE",
+              "quantity": 400,
+              "costPrice": 86.75,
+              "costDate": "2024-01-15",
+              "tradeDate": "2024-01-15",
+              "settlementDate": "2024-01-17",
+              "underlying": "AMZN"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "marketData": {
+    "securities": [
+      {
+        "symbol": "AAPL",
+        "price": 155.25,
+        "currency": "USD"
+      },
+      {
+        "symbol": "MSFT",
+        "price": 420.50,
+        "currency": "USD"
+      },
+      {
+        "symbol": "GOOGL",
+        "price": 142.75,
+        "currency": "USD"
+      },
+      {
+        "symbol": "TSLA",
+        "price": 245.80,
+        "currency": "USD"
+      },
+      {
+        "symbol": "NVDA",
+        "price": 875.25,
+        "currency": "USD"
+      },
+      {
+        "symbol": "AMZN",
+        "price": 168.50,
+        "currency": "USD"
+      }
+    ],
+    "rates": [
+      {
+        "currency": "USD",
+        "rate": 0.0525,
+        "rateType": "INTEREST"
+      }
+    ],
+    "dividends": [
+      {
+        "symbol": "AAPL",
+        "amount": 0.24,
+        "exDate": "2024-01-10",
+        "paymentDate": "2024-01-15",
+        "currency": "USD",
+        "withholdingTax": {
+          "rate": 0.15,
+          "treatment": "GROSS_UP"
+        }
+      },
+      {
+        "symbol": "MSFT",
+        "amount": 0.75,
+        "exDate": "2024-01-12",
+        "paymentDate": "2024-01-17",
+        "currency": "USD",
+        "withholdingTax": {
+          "rate": 0.15,
+          "treatment": "NET_AMOUNT"
+        }
+      },
+      {
+        "symbol": "GOOGL",
+        "amount": 0.20,
+        "exDate": "2024-01-14",
+        "paymentDate": "2024-01-19",
+        "currency": "USD",
+        "withholdingTax": {
+          "rate": 0.15,
+          "treatment": "TAX_CREDIT"
+        }
+      },
+      {
+        "symbol": "AMZN",
+        "amount": 0.00,
+        "exDate": "2024-01-15",
+        "paymentDate": "2024-01-20",
+        "currency": "USD",
+        "withholdingTax": {
+          "rate": 0.00,
+          "treatment": "NO_WITHHOLDING"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "requestId": "TEST_6.5K_LOTS_001",
+  "calculationDate": "2024-01-15",
+  "dateRange": {
+    "fromDate": "2024-01-01",
+    "toDate": "2024-01-31"
+  },
+  "calculationType": "REAL_TIME_PROCESSING",
+  "marketDataStrategy": {
+    "mode": "SELF_CONTAINED"
+  },
+  "marketData": {
+    "data": {
+      "securities": [
+        {
+          "symbol": "IBM",
+          "basePrice": 150.0,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "price": 152.0
+            }
+          ]
+        }
+      ],
+      "rates": [
+        {
+          "index": "SOFR",
+          "baseRate": 5.25,
+          "baseDate": "2024-01-14",
+          "changes": [
+            {
+              "date": "2024-01-15",
+              "rate": 5.30
+            }
+          ]
+        }
+      ],
+      "dividends": [
+        {
+          "symbol": "IBM",
+          "dividends": [
+            {
+              "exDate": "2024-01-10",
+              "amount": 1.65,
+              "currency": "USD"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "contractPositions": [
+    {
+      "contractId": "CONTRACT_001",
+      "underlying": "IBM",
+      "index": "SOFR",
+      "type": "EQUITY_SWAP",
+      "currency": "USD",
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31",
+      "totalNotionalAmount": 1000000.0,
+      "positions": [
+        {
+          "positionId": "POS_001",
+          "product": "EQUITY_LEG",
+          "underlying": "IBM",
+          "notionalAmount": 1000000.0,
+          "currency": "USD",
+          "type": "EQUITY_LEG",
+          "lots": [
+            {
+              "lotId": "LOT_001",
+              "contractId": "CONTRACT_001",
+              "positionId": "POS_001",
+              "underlying": "IBM",
+              "quantity": 100.0,
+              "costPrice": 150.0,
+              "costDate": "2024-01-01",
+              "settlementDate": "2024-01-03",
+              "lotType": "NEW_LOT",
+              "status": "ACTIVE",
+              "unwindingMethod": "FIFO"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
