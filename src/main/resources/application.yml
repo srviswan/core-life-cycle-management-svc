@@ -36,7 +36,7 @@ server:
 
 logging:
   level:
-    com.financial.cashflow: INFO
+    com.financial.cashflow: DEBUG
     org.springframework.web: INFO
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql.BasicBinder: TRACE

@@ -35,6 +35,9 @@ public class CashFlowRequest {
     
     private List<Lot> lots;
     
+    // Enhanced hierarchical structure
+    private List<ContractPosition> contractPositions;
+    
     private String underlying;
     
     private String index;
@@ -212,6 +215,58 @@ public class CashFlowRequest {
             ACTIVE,
             CLOSED,
             ADJUSTED
+        }
+    }
+    
+    /**
+     * Enhanced hierarchical structure: Contract -> Position -> Lots
+     * This represents a contract with multiple positions, where each position contains multiple lots
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ContractPosition {
+        private String contractId;
+        private String underlying;
+        private String index;
+        private ContractType type;
+        private String currency;
+        private LocalDate startDate;
+        private LocalDate endDate;
+        private Double totalNotionalAmount;
+        private List<Position> positions;
+        
+        public enum ContractType {
+            EQUITY_SWAP,
+            EQUITY_FORWARD,
+            EQUITY_OPTION,
+            INTEREST_RATE_SWAP,
+            BOND
+        }
+    }
+    
+    /**
+     * Position within a contract, containing multiple lots
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Position {
+        private String positionId;
+        private String product; // Product identifier for the position
+        private String underlying;
+        private Double notionalAmount;
+        private String currency;
+        private PositionType type;
+        private List<Lot> lots;
+        
+        public enum PositionType {
+            EQUITY_LEG,
+            INTEREST_LEG,
+            DIVIDEND_LEG,
+            CURRENCY_LEG
         }
     }
 }

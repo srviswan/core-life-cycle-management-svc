@@ -104,6 +104,31 @@ CREATE TABLE market_data_cache (
 );
 GO
 
+-- Withholding Tax Details table
+CREATE TABLE withholding_tax_details (
+    id BIGINT IDENTITY(1,1) NOT NULL,
+    contract_id NVARCHAR(255) NOT NULL,
+    underlying NVARCHAR(255) NOT NULL,
+    currency NVARCHAR(255) NOT NULL,
+    calculation_date DATE NOT NULL,
+    calculation_type NVARCHAR(255) NOT NULL,
+    lot_id NVARCHAR(255),
+    ex_date DATE,
+    payment_date DATE,
+    gross_dividend_amount FLOAT NOT NULL,
+    net_dividend_amount FLOAT NOT NULL,
+    withholding_tax_amount FLOAT,
+    withholding_tax_rate FLOAT,
+    withholding_treatment NVARCHAR(255) CHECK (withholding_treatment IN ('GROSS_UP','NET_AMOUNT','NO_WITHHOLDING','TAX_CREDIT')),
+    tax_jurisdiction NVARCHAR(255),
+    tax_utility_reference NVARCHAR(255),
+    created_at DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+    updated_at DATETIME2,
+    
+    CONSTRAINT PK_withholding_tax_details PRIMARY KEY (id)
+);
+GO
+
 -- Indexes for performance
 CREATE INDEX IX_cash_flows_contract_date ON cash_flows (contract_id, calculation_date);
 CREATE INDEX IX_cash_flows_request_id ON cash_flows (request_id);
@@ -115,6 +140,10 @@ CREATE INDEX IX_settlement_instructions_currency ON settlement_instructions (cur
 
 CREATE INDEX IX_market_data_cache_expires ON market_data_cache (expires_at);
 CREATE INDEX IX_market_data_cache_symbol ON market_data_cache (symbol);
+
+CREATE INDEX IX_withholding_tax_contract_date ON withholding_tax_details (contract_id, calculation_date);
+CREATE INDEX IX_withholding_tax_ex_date ON withholding_tax_details (ex_date);
+CREATE INDEX IX_withholding_tax_tax_utility ON withholding_tax_details (tax_utility_reference);
 
 -- Stored procedures for common operations
 CREATE PROCEDURE sp_cleanup_expired_cache

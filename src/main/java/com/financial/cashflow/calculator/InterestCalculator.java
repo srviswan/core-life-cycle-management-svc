@@ -177,4 +177,66 @@ public class InterestCalculator {
         long days = ChronoUnit.DAYS.between(startDate, endDate);
         return notional * currentRate * days / 365.0;
     }
+    
+    /**
+     * Calculate interest for a specific position within a contract
+     * This creates partitions by contract + position combinations
+     */
+    public double calculateInterestForPosition(CashFlowRequest.ContractPosition contractPosition, 
+                                             CashFlowRequest.Position position, 
+                                             MarketData marketData, 
+                                             java.time.LocalDate calculationDate) {
+        log.debug("Calculating position-based interest for contract: {}, position: {}, type: {}", 
+            contractPosition.getContractId(), position.getPositionId(), position.getType());
+        
+        try {
+            // Check position type - only calculate interest for interest positions
+            if (position.getType() != null && position.getType() != CashFlowRequest.Position.PositionType.INTEREST_LEG) {
+                log.debug("Skipping interest calculation for non-interest position: {} (type: {})", 
+                    position.getPositionId(), position.getType());
+                return 0.0; // Non-interest positions don't have interest
+            }
+            
+            // Get current rate from market data
+            double currentRate = getCurrentRate(contractPosition.getIndex(), marketData);
+            
+            // Calculate position-specific notional using position lots
+            double positionBasedNotional = lotNotionalService.calculateInterestBearingNotional(
+                position.getPositionId(), calculationDate, position.getLots());
+            
+            // Fall back to position notional if no lots are settled
+            double effectiveNotional = positionBasedNotional > 0.0 ? positionBasedNotional : 
+                (position.getNotionalAmount() != null ? position.getNotionalAmount() : 1000000.0);
+            
+            log.debug("Using position notional: lot-based={}, position={}, effective={}", 
+                     positionBasedNotional, position.getNotionalAmount(), effectiveNotional);
+            
+            // Calculate interest based on contract type
+            double interest = 0.0;
+            
+            switch (contractPosition.getType()) {
+                case INTEREST_RATE_SWAP:
+                    interest = calculateInterestRateSwapInterestWithNotional(effectiveNotional, currentRate, 
+                                                                           contractPosition.getStartDate(), contractPosition.getEndDate());
+                    break;
+                case EQUITY_SWAP:
+                    interest = calculateEquitySwapInterestWithNotional(effectiveNotional, currentRate, 
+                                                                     contractPosition.getStartDate(), contractPosition.getEndDate());
+                    break;
+                default:
+                    log.warn("Unsupported contract type for interest calculation: {}", contractPosition.getType());
+                    break;
+            }
+            
+            log.debug("Position interest calculated for contract {} + position {}: notional={}, rate={}, interest={}", 
+                     contractPosition.getContractId(), position.getPositionId(), effectiveNotional, currentRate, interest);
+            
+            return interest;
+            
+        } catch (Exception e) {
+            log.error("Failed to calculate position-based interest for contract: {} + position: {}", 
+                contractPosition.getContractId(), position.getPositionId(), e);
+            throw new RuntimeException("Position interest calculation failed", e);
+        }
+    }
 }

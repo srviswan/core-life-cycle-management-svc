@@ -546,4 +546,61 @@ public class DividendCalculator {
         }
         return WithholdingTaxInfo.WithholdingTreatment.valueOf(treatment.name());
     }
+    
+    /**
+     * Calculate dividends for a specific position within a contract
+     * This creates partitions by contract + position combinations
+     */
+    public double calculateDividendsForPosition(CashFlowRequest.ContractPosition contractPosition, 
+                                              CashFlowRequest.Position position, 
+                                              MarketData marketData, 
+                                              LocalDate calculationDate) {
+        log.debug("Calculating position-based dividends for contract: {}, position: {}, type: {}", 
+            contractPosition.getContractId(), position.getPositionId(), position.getType());
+        
+        try {
+            // Check position type - only calculate dividends for dividend positions
+            if (position.getType() != null && position.getType() != CashFlowRequest.Position.PositionType.DIVIDEND_LEG) {
+                log.debug("Skipping dividend calculation for non-dividend position: {} (type: {})", 
+                    position.getPositionId(), position.getType());
+                return 0.0; // Non-dividend positions don't have dividends
+            }
+            
+            // Get dividend data from market data
+            List<Dividend> dividends = getDividends(position.getUnderlying(), marketData);
+            
+            // Calculate position-specific dividends using position lots
+            double positionBasedDividends = calculateLotBasedDividends(position.getPositionId(), dividends, calculationDate, position.getLots());
+            
+            // Fall back to position-based calculation if no lots are available
+            double fallbackDividends = calculatePositionBasedDividends(position, dividends);
+            
+            // Use lot-based dividends if available, otherwise fall back to position-based
+            double effectiveDividends = positionBasedDividends != 0.0 ? positionBasedDividends : fallbackDividends;
+            
+            log.debug("Position dividends calculated for contract {} + position {}: lot-based={}, position-based={}, effective={}", 
+                     contractPosition.getContractId(), position.getPositionId(), positionBasedDividends, fallbackDividends, effectiveDividends);
+            
+            return effectiveDividends;
+            
+        } catch (Exception e) {
+            log.error("Failed to calculate position-based dividends for contract: {} + position: {}", 
+                contractPosition.getContractId(), position.getPositionId(), e);
+            throw new RuntimeException("Position dividend calculation failed", e);
+        }
+    }
+    
+    /**
+     * Calculate position-based dividends (fallback when no lots available)
+     */
+    private double calculatePositionBasedDividends(CashFlowRequest.Position position, List<Dividend> dividends) {
+        // Simple position-based calculation
+        // This would be enhanced based on position type and business rules
+        double notional = position.getNotionalAmount() != null ? position.getNotionalAmount() : 0.0;
+        
+        // Calculate dividends based on position notional
+        return dividends.stream()
+            .mapToDouble(dividend -> dividend.getAmount() * (notional / 100.0)) // Simplified calculation
+            .sum();
+    }
 }

@@ -201,4 +201,59 @@ public class PnLCalculator {
         
         return isActive;
     }
+    
+    /**
+     * Calculate P&L for a specific position within a contract
+     * This creates partitions by contract + position combinations
+     */
+    public double calculatePnLForPosition(CashFlowRequest.ContractPosition contractPosition, 
+                                        CashFlowRequest.Position position, 
+                                        MarketData marketData, 
+                                        LocalDate calculationDate) {
+        log.debug("Calculating position-based P&L for contract: {}, position: {}, type: {}", 
+            contractPosition.getContractId(), position.getPositionId(), position.getType());
+        
+        try {
+            // Check position type - only calculate P&L for equity positions
+            if (position.getType() != null && position.getType() != CashFlowRequest.Position.PositionType.EQUITY_LEG) {
+                log.debug("Skipping P&L calculation for non-equity position: {} (type: {})", 
+                    position.getPositionId(), position.getType());
+                return 0.0; // Non-equity positions don't have P&L
+            }
+            
+            // Get current price from market data
+            double currentPrice = getCurrentPrice(position.getUnderlying(), marketData);
+            
+            // Calculate position-specific P&L using position lots
+            double positionBasedPnL = calculateLotBasedPnL(position.getPositionId(), currentPrice, calculationDate, position.getLots());
+            
+            // Fall back to position-based calculation if no lots are available
+            double fallbackPnL = calculatePositionBasedPnL(position, currentPrice);
+            
+            // Use lot-based P&L if available, otherwise fall back to position-based
+            double effectivePnL = positionBasedPnL != 0.0 ? positionBasedPnL : fallbackPnL;
+            
+            log.debug("Position P&L calculated for contract {} + position {}: lot-based={}, position-based={}, effective={}", 
+                     contractPosition.getContractId(), position.getPositionId(), positionBasedPnL, fallbackPnL, effectivePnL);
+            
+            return effectivePnL;
+            
+        } catch (Exception e) {
+            log.error("Failed to calculate position-based P&L for contract: {} + position: {}", 
+                contractPosition.getContractId(), position.getPositionId(), e);
+            throw new RuntimeException("Position P&L calculation failed", e);
+        }
+    }
+    
+    /**
+     * Calculate position-based P&L (fallback when no lots available)
+     */
+    private double calculatePositionBasedPnL(CashFlowRequest.Position position, double currentPrice) {
+        // Simple position-based calculation
+        // This would be enhanced based on position type and business rules
+        double notional = position.getNotionalAmount() != null ? position.getNotionalAmount() : 0.0;
+        double costPrice = 100.0; // Default cost price - would come from position data
+        
+        return (currentPrice - costPrice) * (notional / currentPrice);
+    }
 }

@@ -191,15 +191,65 @@ public class MarketDataService {
             throw new MarketDataException("No self-contained market data provided");
         }
         
+        // Determine underlying and index based on request structure
+        String underlying = determineUnderlying(request);
+        String index = determineIndex(request);
+        
         return MarketData.builder()
-            .price(extractPriceData(container.getData(), request.getUnderlying()))
-            .rate(extractRateData(container.getData(), request.getIndex()))
-            .dividends(extractDividendData(container.getData(), request.getUnderlying()))
+            .price(extractPriceData(container.getData(), underlying))
+            .rate(extractRateData(container.getData(), index))
+            .dividends(extractDividendData(container.getData(), underlying))
             .timestamp(LocalDateTime.now())
             .source("SELF_CONTAINED")
             .isValid(true)
             .validUntil(LocalDateTime.now().plusHours(24))
             .build();
+    }
+    
+    /**
+     * Determine underlying symbol from request structure
+     */
+    private String determineUnderlying(CashFlowRequest request) {
+        // Check if we have hierarchical structure
+        if (request.getContractPositions() != null && !request.getContractPositions().isEmpty()) {
+            // Use the first contract position's underlying
+            return request.getContractPositions().get(0).getUnderlying();
+        }
+        
+        // Fallback to legacy structure
+        if (request.getUnderlying() != null) {
+            return request.getUnderlying();
+        }
+        
+        // Fallback to contracts
+        if (request.getContracts() != null && !request.getContracts().isEmpty()) {
+            return request.getContracts().get(0).getUnderlying();
+        }
+        
+        throw new MarketDataException("Cannot determine underlying symbol from request");
+    }
+    
+    /**
+     * Determine index from request structure
+     */
+    private String determineIndex(CashFlowRequest request) {
+        // Check if we have hierarchical structure
+        if (request.getContractPositions() != null && !request.getContractPositions().isEmpty()) {
+            // Use the first contract position's index
+            return request.getContractPositions().get(0).getIndex();
+        }
+        
+        // Fallback to legacy structure
+        if (request.getIndex() != null) {
+            return request.getIndex();
+        }
+        
+        // Fallback to contracts
+        if (request.getContracts() != null && !request.getContracts().isEmpty()) {
+            return request.getContracts().get(0).getIndex();
+        }
+        
+        throw new MarketDataException("Cannot determine index from request");
     }
     
     /**

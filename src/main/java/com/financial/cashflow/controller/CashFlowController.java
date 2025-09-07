@@ -9,6 +9,7 @@ import com.financial.cashflow.service.CashFlowService;
 import com.financial.cashflow.service.CalculationStatusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -158,6 +159,103 @@ public class CashFlowController {
             return ResponseEntity.ok(settlements);
         } catch (Exception e) {
             log.error("Failed to get pending settlements", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    // =====================================================
+    // CONSOLIDATION ENDPOINTS - LOT TO POSITION TO CONTRACT
+    // =====================================================
+    
+    /**
+     * Get cash flows consolidated by lot (most granular level)
+     */
+    @GetMapping("/lot/{lotId}")
+    public ResponseEntity<List<CashFlowResponse.CashFlow>> getCashFlowsByLot(
+            @PathVariable String lotId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        
+        try {
+            List<CashFlowResponse.CashFlow> cashFlows = cashFlowService.getCashFlowsByLot(lotId, fromDate, toDate);
+            return ResponseEntity.ok(cashFlows);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for lot: {}", lotId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Get cash flows consolidated by position
+     */
+    @GetMapping("/position/{positionId}")
+    public ResponseEntity<List<CashFlowResponse.CashFlow>> getCashFlowsByPosition(
+            @PathVariable String positionId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        
+        try {
+            List<CashFlowResponse.CashFlow> cashFlows = cashFlowService.getCashFlowsByPosition(positionId, fromDate, toDate);
+            return ResponseEntity.ok(cashFlows);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for position: {}", positionId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by position (sum of all lots in position)
+     */
+    @GetMapping("/position/{positionId}/aggregated")
+    public ResponseEntity<com.financial.cashflow.model.CashFlowAggregation> getAggregatedCashFlowsByPosition(
+            @PathVariable String positionId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        
+        try {
+            com.financial.cashflow.model.CashFlowAggregation aggregation = 
+                cashFlowService.getAggregatedCashFlowsByPosition(positionId, fromDate, toDate);
+            return ResponseEntity.ok(aggregation);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for position: {}", positionId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by contract (sum of all positions in contract)
+     */
+    @GetMapping("/contract/{contractId}/aggregated")
+    public ResponseEntity<com.financial.cashflow.model.CashFlowAggregation> getAggregatedCashFlowsByContract(
+            @PathVariable String contractId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        
+        try {
+            com.financial.cashflow.model.CashFlowAggregation aggregation = 
+                cashFlowService.getAggregatedCashFlowsByContract(contractId, fromDate, toDate);
+            return ResponseEntity.ok(aggregation);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for contract: {}", contractId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Get hierarchical cash flow breakdown (contract -> position -> lot)
+     */
+    @GetMapping("/contract/{contractId}/hierarchy")
+    public ResponseEntity<List<com.financial.cashflow.model.CashFlowHierarchy>> getCashFlowHierarchy(
+            @PathVariable String contractId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        
+        try {
+            List<com.financial.cashflow.model.CashFlowHierarchy> hierarchy = 
+                cashFlowService.getCashFlowHierarchy(contractId, fromDate, toDate);
+            return ResponseEntity.ok(hierarchy);
+        } catch (Exception e) {
+            log.error("Failed to get cash flow hierarchy for contract: {}", contractId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

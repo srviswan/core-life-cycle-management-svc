@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -50,7 +51,10 @@ public class CashFlowService {
             log.info("Market data loaded in {}ms", System.currentTimeMillis() - startTime);
             
             // Perform calculations using platform threads for CPU work
+            log.info("About to call calculationEngine.calculate with request: {}", request.getRequestId());
             CashFlowResponse response = calculationEngine.calculate(request, marketData);
+            log.info("calculationEngine.calculate returned response with {} contract results", 
+                response.getContractResults() != null ? response.getContractResults().size() : 0);
             log.info("Calculation completed in {}ms", System.currentTimeMillis() - startTime);
             
             // Save results
@@ -148,8 +152,27 @@ public class CashFlowService {
      */
     private void saveCashFlows(CashFlowResponse response) {
         try {
-            if (response.getCashFlows() != null && !response.getCashFlows().isEmpty()) {
-                cashFlowRepository.saveAll(response.getCashFlows());
+            // Collect all lot-level cash flows from contract results
+            List<CashFlowResponse.CashFlow> allCashFlows = new ArrayList<>();
+            
+            if (response.getContractResults() != null) {
+                for (CashFlowResponse.ContractResult contractResult : response.getContractResults()) {
+                    if (contractResult.getCashFlows() != null) {
+                        allCashFlows.addAll(contractResult.getCashFlows());
+                    }
+                }
+            }
+            
+            // Also include any top-level cash flows (for backward compatibility)
+            if (response.getCashFlows() != null) {
+                allCashFlows.addAll(response.getCashFlows());
+            }
+            
+            if (!allCashFlows.isEmpty()) {
+                log.info("Saving {} lot-level cash flows to database", allCashFlows.size());
+                cashFlowRepository.saveAll(allCashFlows);
+            } else {
+                log.warn("No cash flows to save for request: {}", response.getRequestId());
             }
         } catch (Exception e) {
             log.error("Failed to save cash flows", e);
@@ -182,6 +205,75 @@ public class CashFlowService {
         } catch (Exception e) {
             log.error("Failed to get pending settlements", e);
             throw new DataRetrievalException("Failed to get pending settlements", e);
+        }
+    }
+    
+    // =====================================================
+    // CONSOLIDATION METHODS - LOT TO POSITION TO CONTRACT
+    // =====================================================
+    
+    /**
+     * Get cash flows consolidated by lot (most granular level)
+     */
+    public List<CashFlowResponse.CashFlow> getCashFlowsByLot(String lotId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flows for lot: {} from {} to {}", lotId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowsByLot(lotId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for lot: {}", lotId, e);
+            throw new DataRetrievalException("Failed to get cash flows for lot", e);
+        }
+    }
+    
+    /**
+     * Get cash flows consolidated by position
+     */
+    public List<CashFlowResponse.CashFlow> getCashFlowsByPosition(String positionId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flows for position: {} from {} to {}", positionId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowsByPosition(positionId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flows for position: {}", positionId, e);
+            throw new DataRetrievalException("Failed to get cash flows for position", e);
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by position (sum of all lots in position)
+     */
+    public com.financial.cashflow.model.CashFlowAggregation getAggregatedCashFlowsByPosition(String positionId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting aggregated cash flows for position: {} from {} to {}", positionId, fromDate, toDate);
+            return cashFlowRepository.getAggregatedCashFlowsByPosition(positionId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for position: {}", positionId, e);
+            throw new DataRetrievalException("Failed to get aggregated cash flows for position", e);
+        }
+    }
+    
+    /**
+     * Get aggregated cash flows by contract (sum of all positions in contract)
+     */
+    public com.financial.cashflow.model.CashFlowAggregation getAggregatedCashFlowsByContract(String contractId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting aggregated cash flows for contract: {} from {} to {}", contractId, fromDate, toDate);
+            return cashFlowRepository.getAggregatedCashFlowsByContract(contractId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get aggregated cash flows for contract: {}", contractId, e);
+            throw new DataRetrievalException("Failed to get aggregated cash flows for contract", e);
+        }
+    }
+    
+    /**
+     * Get hierarchical cash flow breakdown (contract -> position -> lot)
+     */
+    public List<com.financial.cashflow.model.CashFlowHierarchy> getCashFlowHierarchy(String contractId, java.time.LocalDate fromDate, java.time.LocalDate toDate) {
+        try {
+            log.info("Getting cash flow hierarchy for contract: {} from {} to {}", contractId, fromDate, toDate);
+            return cashFlowRepository.getCashFlowHierarchy(contractId, fromDate, toDate);
+        } catch (Exception e) {
+            log.error("Failed to get cash flow hierarchy for contract: {}", contractId, e);
+            throw new DataRetrievalException("Failed to get cash flow hierarchy", e);
         }
     }
     
