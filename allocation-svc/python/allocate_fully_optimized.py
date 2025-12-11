@@ -502,38 +502,6 @@ def fully_optimized_allocator(
                             # This is handled via penalty in objective function (see below)
                             pass
     
-    # Role-based allocation constraints (QA, DEV, BA)
-    if config.get('enforce_role_allocation', False):
-        role_ratios = config.get('role_allocation_ratios', {'DEV': 0.50, 'QA': 0.30, 'BA': 0.20})
-        min_role_alloc = config.get('min_role_allocation', {'DEV': 0.1, 'QA': 0.05, 'BA': 0.0})
-        
-        for pid, month in project_months:
-            # Calculate total allocation for this project-month
-            total_allocation_vars = []
-            for eid in employee_ids:
-                var = variables.get((eid, pid, month))
-                if var is not None:
-                    total_allocation_vars.append(var)
-            
-            if len(total_allocation_vars) > 0:
-                # For each required role, ensure minimum allocation
-                for role in ['DEV', 'QA', 'BA']:
-                    min_fte = min_role_alloc.get(role, 0.0)
-                    if min_fte > 0:
-                        # Sum of allocations from employees with this role
-                        role_allocation_vars = []
-                        for eid in employees_by_role.get(role, []):
-                            var = variables.get((eid, pid, month))
-                            if var is not None:
-                                role_allocation_vars.append(var)
-                        
-                        if len(role_allocation_vars) > 0:
-                            # Constraint: sum of role allocations >= min_fte
-                            constraint = solver.Constraint(min_fte, solver.infinity(), 
-                                                         f'min_{role}_p{pid}_m{month}')
-                            for var in role_allocation_vars:
-                                constraint.SetCoefficient(var, 1.0)
-    
     # Team diversity variables (for team composition constraints) - simplified
     # Full implementation would require binary indicators for team composition
     diversity_penalties = {}
@@ -795,10 +763,7 @@ def fully_optimized_allocator(
                     for eid in employee_ids:
                         var = variables.get((eid, pid, month))
                         if var is not None:
-                            if config['discrete_allocations']:
-                                constraint.SetCoefficient(var, min_alloc)
-                            else:
-                                constraint.SetCoefficient(var, 1.0)
+                            constraint.SetCoefficient(var, 1.0)
     
     # Solve
     solver.SetTimeLimit(30000)  # 30 seconds
