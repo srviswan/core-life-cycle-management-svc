@@ -33,6 +33,7 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
     if config_path is None:
         # Try to find config file automatically
+        # First try user-specific config, then shared config, then example configs
         possible_paths = [
             Path('allocator_config.json'),
             Path('allocator_config.yaml'),
@@ -40,6 +41,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
             Path(__file__).parent / 'allocator_config.json',
             Path(__file__).parent / 'allocator_config.yaml',
             Path(__file__).parent / 'allocator_config.yml',
+            Path(__file__).parent / 'allocator_config_shared.json',
+            Path(__file__).parent / 'allocator_config_shared.yaml',
+            Path(__file__).parent / 'allocator_config_shared.yml',
             Path(__file__).parent / 'config' / 'allocator_config.json',
             Path(__file__).parent / 'config' / 'allocator_config.yaml',
             Path(__file__).parent / 'config' / 'allocator_config.yml',

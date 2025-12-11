@@ -1,0 +1,50 @@
+{
+  "_comment": "Shared allocator configuration file - optimized for maximum budget utilization and full employee allocation",
+  "_description": "Used by both run_demo.py and run_custom_test.py when no config file is specified",
+  
+  "maximize_budget_utilization": true,
+  "budget_maximization_weight_multiplier": 50.0,
+  "min_budget_utilization": 0.0,
+  
+  "allow_allocation_without_skills": true,
+  "no_skills_penalty_multiplier": 1.0,
+  
+  "allow_skill_development": true,
+  "skill_dev_max_fte": 0.2,
+  
+  "max_employee_per_project": 1.0,
+  "min_team_size": 0,
+  
+  "discrete_allocations": false,
+  "allocation_increments": [0.25, 0.5, 0.75, 1.0],
+  
+  "budget_flexibility": true,
+  "max_budget_borrow": 1,
+  
+  "enable_team_diversity": true,
+  "enable_employee_preferences": true,
+  
+  "enforce_role_allocation": false,
+  "min_role_allocation": {
+    "DEV": 0.0,
+    "QA": 0.0,
+    "BA": 0.0
+  },
+  "role_allocation_ratios": {
+    "DEV": 0.50,
+    "QA": 0.30,
+    "BA": 0.20
+  },
+  
+  "weights": {
+    "cost_weight": 0.0,
+    "skill_weight": 0.0,
+    "fragmentation_weight": 0.0,
+    "continuity_weight": 0.0,
+    "balance_weight": 0.0,
+    "preference_weight": 0.0,
+    "diversity_weight": 0.0,
+    "leveling_weight": 0.0,
+    "role_balance_weight": 0.0
+  }
+}

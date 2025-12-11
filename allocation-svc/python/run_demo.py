@@ -287,17 +287,21 @@ scenario_id = 1
 global_start = projects['start_month'].min()
 global_end = projects['end_month'].max()
 
-# Load configuration from file or use defaults
+# Load configuration from file or use shared defaults
+# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) allocator_config_shared.json/yaml, 4) empty config
 # Usage: python run_demo.py [config_file_path]
 config_path = sys.argv[1] if len(sys.argv) > 1 else None
 try:
     config = get_config(config_path, validate=True)
     if config:
         print(f"✓ Loaded configuration from file")
+    else:
+        print("ℹ Using default configuration (no config file found)")
+        config = {}  # Empty config uses allocator built-in defaults
 except Exception as e:
     print(f"⚠ Warning: Could not load config file: {e}")
     print("   Using default configuration (empty config)")
-    config = {}  # Empty config uses defaults
+    config = {}  # Empty config uses allocator built-in defaults
 
 # Load weights from config if present
 weights = get_weights(config)

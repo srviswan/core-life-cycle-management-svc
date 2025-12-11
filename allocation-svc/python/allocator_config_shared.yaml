@@ -1,0 +1,57 @@
+# Shared allocator configuration file
+# This config is optimized for maximum budget utilization and full employee allocation
+# Used by both run_demo.py and run_custom_test.py when no config file is specified
+
+# Budget Management
+maximize_budget_utilization: true
+budget_maximization_weight_multiplier: 50.0  # Very high to prioritize budget utilization
+min_budget_utilization: 0.0
+
+# Skill Matching
+allow_allocation_without_skills: true
+no_skills_penalty_multiplier: 1.0  # Minimal penalty - just slight preference for skills
+
+# Skill Development
+allow_skill_development: true
+skill_dev_max_fte: 0.2
+
+# Team Constraints
+max_employee_per_project: 1.0  # Allow full allocation to projects (100% of capacity)
+min_team_size: 0  # No minimum team size requirement
+
+# Allocation Type
+discrete_allocations: false
+allocation_increments: [0.25, 0.5, 0.75, 1.0]
+
+# Budget Flexibility
+budget_flexibility: true
+max_budget_borrow: 1
+
+# Team Composition
+enable_team_diversity: true
+enable_employee_preferences: true
+
+# Role-Based Allocation
+enforce_role_allocation: false  # Disable role constraints to allow more flexible allocation
+min_role_allocation:
+  DEV: 0.0
+  QA: 0.0
+  BA: 0.0
+role_allocation_ratios:
+  DEV: 0.50
+  QA: 0.30
+  BA: 0.20
+
+# Objective Function Weights
+# All weights set to 0.0 to prioritize budget maximization over other objectives
+# This allows full employee allocation without penalty terms interfering
+weights:
+  cost_weight: 0.0  # Disabled - budget maximization handles this
+  skill_weight: 0.0  # Disabled - allow allocations without perfect skill matches
+  fragmentation_weight: 0.0  # Disabled
+  continuity_weight: 0.0  # Disabled
+  balance_weight: 0.0  # Disabled - allow full allocation to employees
+  preference_weight: 0.0  # Disabled
+  diversity_weight: 0.0  # Disabled
+  leveling_weight: 0.0  # Disabled
+  role_balance_weight: 0.0  # Disabled since enforce_role_allocation is False

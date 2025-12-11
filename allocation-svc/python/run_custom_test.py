@@ -232,7 +232,7 @@ global_end = projects['end_month'].max()
 # Configure to maximize budget utilization and allow allocation without skills
 # For extended timeline, we may need to relax some constraints
 # Load configuration from file or use inline defaults
-# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) inline defaults
+# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) allocator_config_shared.json/yaml, 4) inline defaults
 config_path = sys.argv[1] if len(sys.argv) > 1 else None
 try:
     config = get_config(config_path, validate=True)
@@ -240,7 +240,7 @@ try:
         print(f"✓ Loaded configuration from file")
     else:
         print("ℹ Using default configuration (no config file found)")
-        # Fallback to inline defaults
+        # Fallback to inline defaults (same as shared config)
         config = {
             'maximize_budget_utilization': True,
             'budget_maximization_weight_multiplier': 50.0,  # Very strongly prioritize budget utilization
@@ -256,11 +256,13 @@ except Exception as e:
     print("   Using inline default configuration")
     config = {
         'maximize_budget_utilization': True,
-        'budget_maximization_weight_multiplier': 1.5,
+        'budget_maximization_weight_multiplier': 50.0,
         'min_budget_utilization': 0.0,
         'allow_allocation_without_skills': True,
-        'no_skills_penalty_multiplier': 2.0,
+        'no_skills_penalty_multiplier': 1.0,
         'min_team_size': 0,
+        'max_employee_per_project': 1.0,
+        'enforce_role_allocation': False,
     }
 
 print(f"\nRunning allocator for period: {global_start} to {global_end}...")
