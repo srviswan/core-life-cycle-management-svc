@@ -34,6 +34,19 @@
     "DEV": 0.50,
     "QA": 0.30,
     "BA": 0.20
+  },
+  
+  "_comment_weights": "Objective function weights (optional). If not specified, defaults are used.",
+  "weights": {
+    "cost_weight": 0.30,
+    "skill_weight": 0.15,
+    "fragmentation_weight": 0.10,
+    "continuity_weight": 0.10,
+    "balance_weight": 0.10,
+    "preference_weight": 0.05,
+    "diversity_weight": 0.05,
+    "leveling_weight": 0.05,
+    "role_balance_weight": 0.10
   }
 }
 

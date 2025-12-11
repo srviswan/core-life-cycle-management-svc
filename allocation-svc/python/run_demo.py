@@ -9,7 +9,7 @@ from allocate_fully_optimized import fully_optimized_allocator
 from excel_io import create_template
 from db import connect, write_allocations, load_table
 from scenario import create_scenario, record_history
-from config_loader import get_config
+from config_loader import get_config, get_weights
 
 
 def generate_variance_explanations(projects, employees, actual_allocations, config=None):
@@ -299,16 +299,23 @@ except Exception as e:
     print("   Using default configuration (empty config)")
     config = {}  # Empty config uses defaults
 
+# Load weights from config if present
+weights = get_weights(config)
 allocs = fully_optimized_allocator(
     employees, projects, scenario_id,
     global_start=global_start, global_end=global_end,
-    config=config
+    config=config,
+    weights=weights
 )
 allocs_df = pd.DataFrame(allocs)
 
 # Separate actual allocations from available capacity
 actual_allocations = allocs_df[allocs_df['project_id'].notna()].copy()
-available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
+# Check if available_capacity column exists (it might not be in all allocator outputs)
+if 'available_capacity' in allocs_df.columns:
+    available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
+else:
+    available_capacity = allocs_df[allocs_df['project_id'].isna()].copy()
 
 # For employee utilization calculation, we need ALL allocations (projects + available capacity)
 # to get the true total utilization per month

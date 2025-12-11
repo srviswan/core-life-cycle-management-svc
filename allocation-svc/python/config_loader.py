@@ -183,6 +183,22 @@ def validate_config(config: Dict[str, Any]) -> None:
         for inc in val:
             if not isinstance(inc, (int, float)) or inc < 0 or inc > 1:
                 raise ValueError(f"allocation_increments values must be between 0 and 1, got {inc}")
+    
+    # Validate weights if present
+    if 'weights' in config:
+        val = config['weights']
+        if not isinstance(val, dict):
+            raise ValueError(f"weights must be a dictionary, got {type(val).__name__}")
+        valid_weight_keys = [
+            'cost_weight', 'skill_weight', 'fragmentation_weight', 'continuity_weight',
+            'balance_weight', 'preference_weight', 'diversity_weight', 'leveling_weight',
+            'role_balance_weight'
+        ]
+        for key, weight_val in val.items():
+            if key not in valid_weight_keys:
+                raise ValueError(f"Unknown weight key: {key}. Valid keys: {valid_weight_keys}")
+            if not isinstance(weight_val, (int, float)) or weight_val < 0:
+                raise ValueError(f"weights[{key}] must be >= 0, got {weight_val}")
 
 
 def get_config(config_path: Optional[str] = None, validate: bool = True) -> Dict[str, Any]:
@@ -201,4 +217,18 @@ def get_config(config_path: Optional[str] = None, validate: bool = True) -> Dict
         validate_config(config)
     
     return config
+
+
+def get_weights(config: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    """Extract weights from configuration if present.
+    
+    Args:
+        config: Configuration dictionary
+    
+    Returns:
+        Weights dictionary if present in config, None otherwise
+    """
+    if 'weights' in config:
+        return config['weights'].copy()
+    return None
 

@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 from allocate_fully_optimized import fully_optimized_allocator
-from config_loader import get_config
+from config_loader import get_config, get_weights
 
 BASE = Path(__file__).resolve().parent
 out_path = BASE.parent / 'excel' / 'custom_test_allocations.xlsx'
@@ -265,18 +265,26 @@ except Exception as e:
 
 print(f"\nRunning allocator for period: {global_start} to {global_end}...")
 print("Configuration: maximize_budget_utilization = True")
-# Custom weights to prioritize budget utilization - minimize all penalty terms
-custom_weights = {
-    'cost_weight': 0.0,  # Disabled - budget maximization handles this
-    'skill_weight': 0.0,  # Disabled - allow allocations without perfect skill matches
-    'fragmentation_weight': 0.0,  # Disabled
-    'continuity_weight': 0.0,  # Disabled
-    'balance_weight': 0.0,  # Disabled - allow full allocation to employees
-    'preference_weight': 0.0,  # Disabled
-    'diversity_weight': 0.0,  # Disabled
-    'leveling_weight': 0.0,  # Disabled
-    'role_balance_weight': 0.0  # Disabled since enforce_role_allocation is False
-}
+
+# Load weights from config if present, otherwise use defaults optimized for budget maximization
+custom_weights = get_weights(config)
+if custom_weights is None:
+    # Default weights to prioritize budget utilization - minimize all penalty terms
+    custom_weights = {
+        'cost_weight': 0.0,  # Disabled - budget maximization handles this
+        'skill_weight': 0.0,  # Disabled - allow allocations without perfect skill matches
+        'fragmentation_weight': 0.0,  # Disabled
+        'continuity_weight': 0.0,  # Disabled
+        'balance_weight': 0.0,  # Disabled - allow full allocation to employees
+        'preference_weight': 0.0,  # Disabled
+        'diversity_weight': 0.0,  # Disabled
+        'leveling_weight': 0.0,  # Disabled
+        'role_balance_weight': 0.0  # Disabled since enforce_role_allocation is False
+    }
+    print("ℹ Using default weights optimized for budget maximization")
+else:
+    print("✓ Loaded weights from configuration")
+
 allocs = fully_optimized_allocator(
     employees, projects, scenario_id,
     global_start=global_start, global_end=global_end,
