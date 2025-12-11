@@ -9,6 +9,81 @@ from excel_io import create_template
 from db import connect, write_allocations, load_table
 from scenario import create_scenario, record_history
 
+
+def create_pivot_views(allocations_df):
+    """Create pivot table views with employee+project as rows and months/quarters as columns.
+    
+    Returns:
+        tuple: (monthly_pivot, quarterly_pivot)
+    """
+    # Filter to actual allocations only
+    df = allocations_df[allocations_df['project_id'].notna()].copy()
+    
+    if len(df) == 0:
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # Create employee-project key
+    df['employee_project'] = df['employee_name'] + ' - ' + df['project_name']
+    
+    # Ensure month is string format
+    df['month'] = df['month'].astype(str)
+    
+    # Create monthly pivot: employee+project rows, months as columns
+    monthly_pivot = df.pivot_table(
+        index=['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project'],
+        columns='month',
+        values='allocation_fraction',
+        aggfunc='sum',
+        fill_value=0.0
+    ).reset_index()
+    
+    # Rename columns to remove 'month' from column names
+    monthly_pivot.columns.name = None
+    
+    # Create quarter mapping
+    def get_quarter(month_str):
+        """Convert YYYY-MM to quarter string (e.g., '2025-01' -> '2025-Q1')"""
+        try:
+            year, month = month_str.split('-')
+            quarter = (int(month) - 1) // 3 + 1
+            return f"{year}-Q{quarter}"
+        except:
+            return month_str
+    
+    # Add quarter column
+    df['quarter'] = df['month'].apply(get_quarter)
+    
+    # Create quarterly pivot
+    quarterly_pivot = df.pivot_table(
+        index=['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project'],
+        columns='quarter',
+        values='allocation_fraction',
+        aggfunc='sum',
+        fill_value=0.0
+    ).reset_index()
+    
+    # Rename columns to remove 'quarter' from column names
+    quarterly_pivot.columns.name = None
+    
+    # Sort columns: first the index columns, then months/quarters in order
+    def sort_columns(df_pivot, date_cols):
+        """Sort date columns chronologically"""
+        index_cols = [col for col in df_pivot.columns if col not in date_cols]
+        sorted_date_cols = sorted(date_cols)
+        return df_pivot[index_cols + sorted_date_cols]
+    
+    # Get date columns for monthly pivot
+    monthly_date_cols = [col for col in monthly_pivot.columns if col not in 
+                        ['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project']]
+    monthly_pivot = sort_columns(monthly_pivot, monthly_date_cols)
+    
+    # Get date columns for quarterly pivot
+    quarterly_date_cols = [col for col in quarterly_pivot.columns if col not in 
+                          ['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project']]
+    quarterly_pivot = sort_columns(quarterly_pivot, quarterly_date_cols)
+    
+    return monthly_pivot, quarterly_pivot
+
 BASE = Path(__file__).resolve().parent
 excel_path = BASE.parent / 'excel' / 'budget_planner_template.xlsx'
 out_path = BASE.parent / 'excel' / 'budget_planner_allocations.xlsx'
@@ -58,14 +133,31 @@ print(f'  Available capacity records: {len(available_capacity)}')
 if len(available_capacity) > 0:
     print(f'  Total available FTE: {available_capacity["allocation_fraction"].sum():.2f}')
 
+# Create pivot views
+print("\nCreating pivot views...")
+monthly_pivot, quarterly_pivot = create_pivot_views(allocs_df)
+print(f'  Monthly pivot: {len(monthly_pivot)} rows')
+print(f'  Quarterly pivot: {len(quarterly_pivot)} rows')
+
 # Write to Excel
 print("\nWriting to Excel...")
 with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
+    # Original format sheets
     allocs_df.to_excel(writer, sheet_name='Allocations', index=False)
     if len(actual_allocations) > 0:
         actual_allocations.to_excel(writer, sheet_name='Project_Allocations', index=False)
     if len(available_capacity) > 0:
         available_capacity.to_excel(writer, sheet_name='Available_Capacity', index=False)
+    
+    # New pivot format sheets
+    if len(monthly_pivot) > 0:
+        monthly_pivot.to_excel(writer, sheet_name='Monthly_View', index=False)
+        print('  ✓ Created Monthly_View sheet (employee+project rows, month columns)')
+    if len(quarterly_pivot) > 0:
+        quarterly_pivot.to_excel(writer, sheet_name='Quarterly_View', index=False)
+        print('  ✓ Created Quarterly_View sheet (employee+project rows, quarter columns)')
+    
+    # Reference data
     employees.to_excel(writer, sheet_name='Employees', index=False)
     projects.to_excel(writer, sheet_name='Projects', index=False)
 print(f'✓ Excel output written to {out_path}')

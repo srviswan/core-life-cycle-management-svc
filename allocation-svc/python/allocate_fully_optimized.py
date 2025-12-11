@@ -154,6 +154,8 @@ def fully_optimized_allocator(
         'min_grade_diversity': False,
         'enable_employee_preferences': True,
         'enforce_role_allocation': True,  # New: Enforce QA/DEV/BA allocation
+        'allow_allocation_without_skills': False,  # Allow allocation even if no skills match (with penalty)
+        'no_skills_penalty_multiplier': 2.0,  # Cost multiplier when allocating without required skills
         'role_allocation_ratios': {  # New: Required role proportions
             'DEV': 0.50,  # 50% of project allocation should be DEV
             'QA': 0.30,   # 30% should be QA
@@ -308,6 +310,16 @@ def fully_optimized_allocator(
                     var = solver.NumVar(0.0, float(emp_row['fte_capacity']), var_name)
                 variables[(eid, pid, month)] = var
                 skill_scores[(eid, pid)] = skill_score(emp_row, req_skills)
+            elif config.get('allow_allocation_without_skills', False):
+                # Allow allocation even without required skills (with penalty)
+                var_name = f'x_e{eid}_p{pid}_m{month}_noskills'
+                if config['discrete_allocations']:
+                    max_level = len(config['allocation_increments']) - 1
+                    var = solver.IntVar(0, max_level, var_name)
+                else:
+                    var = solver.NumVar(0.0, float(emp_row['fte_capacity']), var_name)
+                variables[(eid, pid, month)] = var
+                skill_scores[(eid, pid)] = 0.0  # No skill match
             else:
                 variables[(eid, pid, month)] = None
             
@@ -535,12 +547,20 @@ def fully_optimized_allocator(
             
             priority_factor = 1.0 / proj_info['priority']
             
+            # Check if this is an allocation without required skills
+            has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
+            no_skills_penalty = 0.0
+            if not has_skills_for_proj and config.get('allow_allocation_without_skills', False):
+                # Apply penalty multiplier for allocations without required skills
+                penalty_mult = config.get('no_skills_penalty_multiplier', 2.0)
+                no_skills_penalty = cost * (penalty_mult - 1.0)  # Additional cost penalty
+            
             if config['discrete_allocations']:
                 # For discrete, cost scales with allocation level
-                coeff = (cost + region_penalty) * priority_factor * weights['cost_weight']
+                coeff = (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight']
                 objective.SetCoefficient(var, coeff * 0.5)  # Average increment size
             else:
-                objective.SetCoefficient(var, (cost + region_penalty) * priority_factor * weights['cost_weight'])
+                objective.SetCoefficient(var, (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight'])
     
     # 2. Skill quality
     max_skill_score = max(skill_scores.values()) if skill_scores else 1.0
@@ -795,7 +815,9 @@ def fully_optimized_allocator(
             if value > 1e-6:
                 emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
                 cost = value * float(emp_row['cost_per_month'])
-                allocations.append({
+                # Check if this allocation was made without required skills
+                has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
+                alloc_dict = {
                     'scenario_id': scenario_id,
                     'employee_id': eid,
                     'employee_name': employee_names.get(eid, f'Employee_{eid}'),
@@ -805,7 +827,10 @@ def fully_optimized_allocator(
                     'month': month,
                     'allocation_fraction': round(value, 4),
                     'cost': round(cost, 2)
-                })
+                }
+                if not has_skills_for_proj:
+                    alloc_dict['no_required_skills'] = True  # Flag for allocations without required skills
+                allocations.append(alloc_dict)
                 employee_month_allocated[eid][month] += value
     
     # Add skill development allocations
@@ -860,6 +885,29 @@ def fully_optimized_allocator(
                     'cost': 0.0,  # No cost for available capacity
                     'available_capacity': True  # Flag to indicate this is available capacity
                 })
+    
+    # Generate skill gap report for projects with no allocations
+    allocated_projects = set()
+    for alloc in allocations:
+        if alloc.get('project_id') and alloc.get('project_id') is not None:
+            allocated_projects.add(alloc['project_id'])
+    
+    all_projects = set(project_data.keys())
+    unallocated_projects = all_projects - allocated_projects
+    
+    if unallocated_projects:
+        print(f'\n⚠️  Warning: {len(unallocated_projects)} project(s) could not be allocated:')
+        for pid in unallocated_projects:
+            proj_name = project_names.get(pid, f'Project_{pid}')
+            req_skills = project_data[pid]['required_skills']
+            tech_skills = req_skills.get('technical', [])
+            func_skills = req_skills.get('functional', [])
+            print(f'  - {proj_name} (ID: {pid})')
+            if tech_skills:
+                print(f'    Required technical skills: {", ".join(tech_skills)}')
+            if func_skills:
+                print(f'    Required functional skills: {", ".join(func_skills)}')
+            print(f'    Suggestion: Enable "allow_allocation_without_skills" or add employees with matching skills')
     
     return allocations
 
