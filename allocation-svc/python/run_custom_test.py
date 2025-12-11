@@ -19,7 +19,7 @@ employees = pd.DataFrame([
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'female',
-        'technical_skills': 'java',
+        'technical_skills': 'dev,java',
         'functional_skills': 'delta1',
         'cost_per_month': 3267,
         'region': 'IN',
@@ -34,7 +34,7 @@ employees = pd.DataFrame([
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'male',
-        'technical_skills': 'java',
+        'technical_skills': 'qa,testing',
         'functional_skills': 'delta1',
         'cost_per_month': 3267,
         'region': 'IN',
@@ -49,9 +49,9 @@ employees = pd.DataFrame([
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'male',
-        'technical_skills': 'java',
+        'technical_skills': 'core-lifecycle',
         'functional_skills': 'core-lifecycle,delta1',
-        'cost_per_month': 3500,  # Default since not specified
+        'cost_per_month': 12970,  # Default since not specified
         'region': 'IN',
         'fte_capacity': 1.0,
         'role': 'BA'
@@ -59,14 +59,14 @@ employees = pd.DataFrame([
     # Adding 5 more employees to make 8 total
     {
         'employee_id': 4,
-        'employee_name': 'Employee 4',
+        'employee_name': 'Atul',
         'status': 'active',
         'grade': 'G5',
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'other',
-        'technical_skills': 'java',
-        'functional_skills': 'core-lifecycle,delta1',
+        'technical_skills': 'dev,java',
+        'functional_skills': 'core-lifecycle,delta1,risk',
         'cost_per_month': 3267,
         'region': 'IN',
         'fte_capacity': 1.0,
@@ -74,14 +74,14 @@ employees = pd.DataFrame([
     },
     {
         'employee_id': 5,
-        'employee_name': 'Employee 5',
+        'employee_name': 'Sagar ',
         'status': 'active',
         'grade': 'G5',
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'other',
-        'technical_skills': 'java',
-        'functional_skills': 'delta1',
+        'technical_skills': 'ETL,SQL,Informatica',
+        'functional_skills': 'swapmart,cashbalance',
         'cost_per_month': 3267,
         'region': 'IN',
         'fte_capacity': 1.0,
@@ -89,14 +89,14 @@ employees = pd.DataFrame([
     },
     {
         'employee_id': 6,
-        'employee_name': 'Employee 6',
+        'employee_name': 'Kushal ',
         'status': 'active',
         'grade': 'G6',
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'other',
-        'technical_skills': 'java',
-        'functional_skills': 'core-lifecycle',
+        'technical_skills': 'dev,java',
+        'functional_skills': 'core-lifecycle,delta1,interest',
         'cost_per_month': 3500,
         'region': 'IN',
         'fte_capacity': 1.0,
@@ -104,13 +104,13 @@ employees = pd.DataFrame([
     },
     {
         'employee_id': 7,
-        'employee_name': 'Employee 7',
+        'employee_name': 'shivani ',
         'status': 'active',
         'grade': 'G5',
         'location': 'Bengaluru',
         'country': 'India',
         'gender': 'other',
-        'technical_skills': 'java',
+        'technical_skills': 'dev,java',
         'functional_skills': 'core-lifecycle,delta1',
         'cost_per_month': 3267,
         'region': 'IN',
@@ -126,7 +126,7 @@ employees = pd.DataFrame([
         'country': 'India',
         'gender': 'other',
         'technical_skills': 'java',
-        'functional_skills': 'delta1,core-lifecycle',
+        'functional_skills': 'synfiny',
         'cost_per_month': 3267,
         'region': 'IN',
         'fte_capacity': 1.0,
@@ -167,7 +167,7 @@ projects = pd.DataFrame([
             'technical': ['java'],
             'functional': ['core-lifecycle', 'delta1']
         }),
-        'start_month': '2025-01',
+        'start_month': '2026-01',
         'end_month': '2026-12'
     },
     {
@@ -185,7 +185,7 @@ projects = pd.DataFrame([
             'technical': ['java'],
             'functional': ['core-lifecycle', 'delta1']
         }),
-        'start_month': '2025-01',
+        'start_month': '2026-01',
         'end_month': '2026-12'
     },
     {
@@ -203,7 +203,7 @@ projects = pd.DataFrame([
             'technical': ['java'],
             'functional': ['core-lifecycle', 'delta1']
         }),
-        'start_month': '2025-01',
+        'start_month': '2026-01',
         'end_month': '2026-12'
     }
 ])
@@ -243,11 +243,13 @@ try:
         # Fallback to inline defaults
         config = {
             'maximize_budget_utilization': True,
-            'budget_maximization_weight_multiplier': 1.5,
+            'budget_maximization_weight_multiplier': 50.0,  # Very strongly prioritize budget utilization
             'min_budget_utilization': 0.0,
             'allow_allocation_without_skills': True,
-            'no_skills_penalty_multiplier': 2.0,
+            'no_skills_penalty_multiplier': 1.0,  # Minimal penalty - just slight preference for skills
             'min_team_size': 0,
+            'max_employee_per_project': 1.0,  # Allow full allocation to projects (100% of capacity)
+            'enforce_role_allocation': False,  # Disable role constraints to allow more flexible allocation
         }
 except Exception as e:
     print(f"⚠ Warning: Could not load config file: {e}")
@@ -263,10 +265,23 @@ except Exception as e:
 
 print(f"\nRunning allocator for period: {global_start} to {global_end}...")
 print("Configuration: maximize_budget_utilization = True")
+# Custom weights to prioritize budget utilization - minimize all penalty terms
+custom_weights = {
+    'cost_weight': 0.0,  # Disabled - budget maximization handles this
+    'skill_weight': 0.0,  # Disabled - allow allocations without perfect skill matches
+    'fragmentation_weight': 0.0,  # Disabled
+    'continuity_weight': 0.0,  # Disabled
+    'balance_weight': 0.0,  # Disabled - allow full allocation to employees
+    'preference_weight': 0.0,  # Disabled
+    'diversity_weight': 0.0,  # Disabled
+    'leveling_weight': 0.0,  # Disabled
+    'role_balance_weight': 0.0  # Disabled since enforce_role_allocation is False
+}
 allocs = fully_optimized_allocator(
     employees, projects, scenario_id,
     global_start=global_start, global_end=global_end,
-    config=config
+    config=config,
+    weights=custom_weights
 )
 
 if not allocs or len(allocs) == 0:
@@ -286,7 +301,11 @@ allocs_df = pd.DataFrame(allocs)
 
 # Separate actual allocations from available capacity
 actual_allocations = allocs_df[allocs_df['project_id'].notna()].copy()
-available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
+# Check if available_capacity column exists (it might not be in all allocator outputs)
+if 'available_capacity' in allocs_df.columns:
+    available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
+else:
+    available_capacity = allocs_df[allocs_df['project_id'].isna()].copy()
 
 # For employee utilization calculation, we need ALL allocations (projects + available capacity)
 # to get the true total utilization per month

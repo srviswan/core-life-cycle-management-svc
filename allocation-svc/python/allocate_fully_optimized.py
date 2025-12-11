@@ -537,33 +537,34 @@ def fully_optimized_allocator(
     objective = solver.Objective()
     avg_cost = active_employees['cost_per_month'].mean()
     
-    # 1. Cost minimization
-    for (eid, pid, month), var in variables.items():
-        if var is not None:
-            emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
-            cost = float(emp_row['cost_per_month'])
-            proj_info = project_data[pid]
-            
-            region_penalty = 0.0
-            if proj_info['region_preference'] and emp_row['region'] != proj_info['region_preference']:
-                region_penalty = cost * 0.1
-            
-            priority_factor = 1.0 / proj_info['priority']
-            
-            # Check if this is an allocation without required skills
-            has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
-            no_skills_penalty = 0.0
-            if not has_skills_for_proj and config.get('allow_allocation_without_skills', False):
-                # Apply penalty multiplier for allocations without required skills
-                penalty_mult = config.get('no_skills_penalty_multiplier', 2.0)
-                no_skills_penalty = cost * (penalty_mult - 1.0)  # Additional cost penalty
-            
-            if config['discrete_allocations']:
-                # For discrete, cost scales with allocation level
-                coeff = (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight']
-                objective.SetCoefficient(var, coeff * 0.5)  # Average increment size
-            else:
-                objective.SetCoefficient(var, (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight'])
+    # 1. Cost minimization (skip if budget maximization is enabled - it will be handled separately)
+    if not config.get('maximize_budget_utilization', False):
+        for (eid, pid, month), var in variables.items():
+            if var is not None:
+                emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
+                cost = float(emp_row['cost_per_month'])
+                proj_info = project_data[pid]
+                
+                region_penalty = 0.0
+                if proj_info['region_preference'] and emp_row['region'] != proj_info['region_preference']:
+                    region_penalty = cost * 0.1
+                
+                priority_factor = 1.0 / proj_info['priority']
+                
+                # Check if this is an allocation without required skills
+                has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
+                no_skills_penalty = 0.0
+                if not has_skills_for_proj and config.get('allow_allocation_without_skills', False):
+                    # Apply penalty multiplier for allocations without required skills
+                    penalty_mult = config.get('no_skills_penalty_multiplier', 2.0)
+                    no_skills_penalty = cost * (penalty_mult - 1.0)  # Additional cost penalty
+                
+                if config['discrete_allocations']:
+                    # For discrete, cost scales with allocation level
+                    coeff = (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight']
+                    objective.SetCoefficient(var, coeff * 0.5)  # Average increment size
+                else:
+                    objective.SetCoefficient(var, (cost + region_penalty + no_skills_penalty) * priority_factor * weights['cost_weight'])
     
     # 2. Skill quality
     max_skill_score = max(skill_scores.values()) if skill_scores else 1.0
@@ -660,15 +661,40 @@ def fully_optimized_allocator(
     # Budget utilization maximization (if enabled)
     if config.get('maximize_budget_utilization', False):
         # Add negative cost to maximize budget usage (minimize negative cost = maximize cost)
-        # Use stronger weight to compete with cost minimization
-        budget_max_weight = weights.get('cost_weight', 0.30) * config.get('budget_maximization_weight_multiplier', 1.0)
+        # When budget maximization is enabled, we disable cost minimization above
+        # Use a strong base weight to ensure budget maximization dominates
+        base_weight = 1.0  # Base weight for budget maximization
+        budget_multiplier = config.get('budget_maximization_weight_multiplier', 1.0)
+        budget_max_weight = base_weight * budget_multiplier
+        
         for (eid, pid, month), var in variables.items():
             if var is not None:
                 emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
                 cost = float(emp_row['cost_per_month'])
+                proj_info = project_data[pid]
+                
+                # Apply penalties for region mismatch and no skills (but still maximize budget)
+                region_penalty = 0.0
+                if proj_info['region_preference'] and emp_row['region'] != proj_info['region_preference']:
+                    region_penalty = cost * 0.1
+                
+                priority_factor = 1.0 / proj_info['priority']
+                
+                # Check if this is an allocation without required skills
+                has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
+                no_skills_penalty = 0.0
+                if not has_skills_for_proj and config.get('allow_allocation_without_skills', False):
+                    # Apply penalty multiplier for allocations without required skills
+                    penalty_mult = config.get('no_skills_penalty_multiplier', 2.0)
+                    no_skills_penalty = cost * (penalty_mult - 1.0)  # Additional cost penalty
+                
                 # Negative coefficient to maximize (minimize negative = maximize positive)
-                # Use same or higher weight than cost minimization to ensure budget maximization wins
-                objective.SetCoefficient(var, -cost * budget_max_weight)
+                # Subtract penalties from cost to still prefer allocations with skills and matching regions
+                effective_cost = cost + region_penalty + no_skills_penalty
+                if config['discrete_allocations']:
+                    objective.SetCoefficient(var, -effective_cost * budget_max_weight * priority_factor * 0.5)
+                else:
+                    objective.SetCoefficient(var, -effective_cost * budget_max_weight * priority_factor)
     
     # Set minimization (even with budget maximization, we still minimize the combined objective)
     objective.SetMinimization()

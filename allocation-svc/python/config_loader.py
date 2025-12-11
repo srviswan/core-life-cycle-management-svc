@@ -201,3 +201,4 @@ def get_config(config_path: Optional[str] = None, validate: bool = True) -> Dict
         validate_config(config)
     
     return config
+

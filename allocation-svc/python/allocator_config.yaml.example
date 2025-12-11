@@ -40,3 +40,4 @@ role_allocation_ratios:
   DEV: 0.50
   QA: 0.30
   BA: 0.20
+
