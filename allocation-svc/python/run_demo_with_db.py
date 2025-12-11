@@ -311,6 +311,10 @@ allocs_df = pd.DataFrame(allocs)
 actual_allocations = allocs_df[allocs_df['project_id'].notna()].copy()
 available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
 
+# For employee utilization calculation, we need ALL allocations (projects + available capacity)
+# to get the true total utilization per month
+all_allocations_for_util = allocs_df.copy()  # Use all allocations for utilization calculation
+
 print(f'\nAllocation Summary:')
 print(f'  Actual allocations: {len(actual_allocations)}')
 print(f'  Total cost: ${actual_allocations["cost"].sum():,.2f}')
@@ -379,25 +383,61 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
     # Add allocation summary to Employees sheet
     employees_with_allocation = employees.copy()
     if len(actual_allocations) > 0:
+        # Calculate total allocated cost per employee (sum across all project allocations only)
         employee_summary = actual_allocations.groupby('employee_id').agg({
-            'cost': 'sum', 'allocation_fraction': 'sum'
+            'cost': 'sum',
+            'allocation_fraction': 'sum'
         }).reset_index()
-        employee_summary.columns = ['employee_id', 'total_allocated_cost', 'total_allocated_fte']
+        employee_summary.columns = ['employee_id', 'total_allocated_cost', 'total_fte_months']
+        
+        # Calculate average FTE per month (total utilization including available capacity)
+        # Use ALL allocations to get true monthly totals per employee
+        # This represents the total FTE utilization per month (projects + available capacity = total capacity used)
+        monthly_totals_all = all_allocations_for_util.groupby(['employee_id', 'month'])['allocation_fraction'].sum().reset_index()
+        monthly_totals_all.columns = ['employee_id', 'month', 'monthly_fte_total']
+        
+        # Calculate average FTE per month per employee (mean of monthly totals)
+        # This is the average total FTE utilization per month
+        employee_monthly_avg = monthly_totals_all.groupby('employee_id').agg({
+            'monthly_fte_total': 'mean',  # Average of monthly totals (avg total FTE per month)
+            'month': 'nunique'  # Number of unique months
+        }).reset_index()
+        employee_monthly_avg.columns = ['employee_id', 'avg_fte_per_month', 'unique_months']
+        employee_monthly_avg['avg_fte_per_month'] = employee_monthly_avg['avg_fte_per_month'].round(4)
+        
+        # Merge with employee_summary
+        employee_summary = employee_summary.merge(
+            employee_monthly_avg[['employee_id', 'avg_fte_per_month', 'unique_months']],
+            on='employee_id',
+            how='left'
+        )
+        employee_summary['total_allocated_fte'] = employee_summary['avg_fte_per_month']  # Average FTE per month
+        employee_summary = employee_summary.drop(columns=['total_fte_months'])
+        
+        # Merge with employees
         employees_with_allocation = employees_with_allocation.merge(
-            employee_summary, left_on='employee_id', right_on='employee_id', how='left'
+            employee_summary[['employee_id', 'total_allocated_cost', 'total_allocated_fte', 'unique_months']],
+            left_on='employee_id',
+            right_on='employee_id',
+            how='left'
         )
         employees_with_allocation['total_allocated_cost'] = employees_with_allocation['total_allocated_cost'].fillna(0.0)
         employees_with_allocation['total_allocated_fte'] = employees_with_allocation['total_allocated_fte'].fillna(0.0)
+        employees_with_allocation['unique_months'] = employees_with_allocation['unique_months'].fillna(0).astype(int)
+        
+        # Calculate utilization percentage (average FTE per month / capacity)
         employees_with_allocation['fte_utilization_pct'] = (
             (employees_with_allocation['total_allocated_fte'] / employees_with_allocation['fte_capacity'] * 100).round(2)
         ).fillna(0.0)
+        
+        # Calculate remaining capacity (capacity - average FTE per month)
         employees_with_allocation['remaining_fte_capacity'] = (
             employees_with_allocation['fte_capacity'] - employees_with_allocation['total_allocated_fte']
         ).round(4)
         # Add explanation of variance
         employees_with_allocation['explanation_of_variance'] = employee_explanations
         cols = list(employees_with_allocation.columns)
-        alloc_cols = ['total_allocated_cost', 'total_allocated_fte', 'fte_utilization_pct', 'remaining_fte_capacity', 'explanation_of_variance']
+        alloc_cols = ['total_allocated_cost', 'total_allocated_fte', 'unique_months', 'fte_utilization_pct', 'remaining_fte_capacity', 'explanation_of_variance']
         other_cols = [c for c in cols if c not in alloc_cols]
         if 'cost_per_month' in other_cols:
             cost_idx = other_cols.index('cost_per_month')
