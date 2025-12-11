@@ -156,6 +156,9 @@ def fully_optimized_allocator(
         'enforce_role_allocation': True,  # New: Enforce QA/DEV/BA allocation
         'allow_allocation_without_skills': False,  # Allow allocation even if no skills match (with penalty)
         'no_skills_penalty_multiplier': 2.0,  # Cost multiplier when allocating without required skills
+        'maximize_budget_utilization': False,  # Maximize budget usage (adds negative cost term to objective)
+        'budget_maximization_weight_multiplier': 1.0,  # Multiplier for budget maximization weight (1.0 = same as cost weight)
+        'min_budget_utilization': 0.0,  # Minimum budget utilization (0.0-1.0) - adds constraint to use at least X% of budget
         'role_allocation_ratios': {  # New: Required role proportions
             'DEV': 0.50,  # 50% of project allocation should be DEV
             'QA': 0.30,   # 30% should be QA
@@ -654,6 +657,20 @@ def fully_optimized_allocator(
         for (role, pid, month), penalty_var in role_balance_penalties.items():
             objective.SetCoefficient(penalty_var, avg_cost * weights.get('role_balance_weight', 0.10))
     
+    # Budget utilization maximization (if enabled)
+    if config.get('maximize_budget_utilization', False):
+        # Add negative cost to maximize budget usage (minimize negative cost = maximize cost)
+        # Use stronger weight to compete with cost minimization
+        budget_max_weight = weights.get('cost_weight', 0.30) * config.get('budget_maximization_weight_multiplier', 1.0)
+        for (eid, pid, month), var in variables.items():
+            if var is not None:
+                emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
+                cost = float(emp_row['cost_per_month'])
+                # Negative coefficient to maximize (minimize negative = maximize positive)
+                # Use same or higher weight than cost minimization to ensure budget maximization wins
+                objective.SetCoefficient(var, -cost * budget_max_weight)
+    
+    # Set minimization (even with budget maximization, we still minimize the combined objective)
     objective.SetMinimization()
     
     # CONSTRAINTS
@@ -700,6 +717,22 @@ def fully_optimized_allocator(
                             constraint.SetCoefficient(var, cost * 0.5)  # Average
                         else:
                             constraint.SetCoefficient(var, cost)
+            
+            # Minimum budget utilization constraint (if enabled)
+            min_utilization = config.get('min_budget_utilization', 0.0)
+            if min_utilization > 0.0 and total_budget > 0:
+                min_budget = total_budget * min_utilization
+                min_constraint = solver.Constraint(min_budget, solver.infinity(), f'min_budget_util_p{pid}')
+                for month in months_list:
+                    for eid in employee_ids:
+                        var = variables.get((eid, pid, month))
+                        if var is not None:
+                            emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
+                            cost = float(emp_row['cost_per_month'])
+                            if config['discrete_allocations']:
+                                min_constraint.SetCoefficient(var, cost * 0.5)
+                            else:
+                                min_constraint.SetCoefficient(var, cost)
     else:
         # Per-month budget constraints
         for pid, month in project_months:
@@ -716,6 +749,21 @@ def fully_optimized_allocator(
                             constraint.SetCoefficient(var, cost * 0.5)
                         else:
                             constraint.SetCoefficient(var, cost)
+                
+                # Minimum budget utilization per month (if enabled)
+                min_utilization = config.get('min_budget_utilization', 0.0)
+                if min_utilization > 0.0:
+                    min_budget = budget * min_utilization
+                    min_constraint = solver.Constraint(min_budget, solver.infinity(), f'min_budget_util_p{pid}_m{month}')
+                    for eid in employee_ids:
+                        var = variables.get((eid, pid, month))
+                        if var is not None:
+                            emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
+                            cost = float(emp_row['cost_per_month'])
+                            if config['discrete_allocations']:
+                                min_constraint.SetCoefficient(var, cost * 0.5)
+                            else:
+                                min_constraint.SetCoefficient(var, cost)
     
     # Constraint 3: Risk mitigation - Max allocation per employee per project
     if config['max_employee_per_project'] < 1.0:

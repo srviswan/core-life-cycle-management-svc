@@ -1,19 +1,307 @@
-"""run_demo.py - demo that runs allocator with local sample Excel template
-This script uses the excel template to load data, run allocator, and write allocations back to Excel and/or database.
-"""
-import pandas as pd, json
-import os
+"""run_custom_test.py - Custom test with specific projects and employees"""
+import pandas as pd
+import json
 from pathlib import Path
 from allocate_fully_optimized import fully_optimized_allocator
-from excel_io import create_template
-from db import connect, write_allocations, load_table
-from scenario import create_scenario, record_history
 
+BASE = Path(__file__).resolve().parent
+out_path = BASE.parent / 'excel' / 'custom_test_allocations.xlsx'
 
-def generate_variance_explanations(projects, employees, actual_allocations, config=None):
+# Create employees DataFrame
+employees = pd.DataFrame([
+    {
+        'employee_id': 1,
+        'employee_name': 'Pooja',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'female',
+        'technical_skills': 'java',
+        'functional_skills': 'delta1',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'DEV'
+    },
+    {
+        'employee_id': 2,
+        'employee_name': 'Vikas Dubey',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'male',
+        'technical_skills': 'java',
+        'functional_skills': 'delta1',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'QA'
+    },
+    {
+        'employee_id': 3,
+        'employee_name': 'Birumandandan',
+        'status': 'active',
+        'grade': 'G6',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'male',
+        'technical_skills': 'java',
+        'functional_skills': 'core-lifecycle,delta1',
+        'cost_per_month': 3500,  # Default since not specified
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'BA'
+    },
+    # Adding 5 more employees to make 8 total
+    {
+        'employee_id': 4,
+        'employee_name': 'Employee 4',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'java',
+        'functional_skills': 'core-lifecycle,delta1',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'DEV'
+    },
+    {
+        'employee_id': 5,
+        'employee_name': 'Employee 5',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'java',
+        'functional_skills': 'delta1',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'QA'
+    },
+    {
+        'employee_id': 6,
+        'employee_name': 'Employee 6',
+        'status': 'active',
+        'grade': 'G6',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'java',
+        'functional_skills': 'core-lifecycle',
+        'cost_per_month': 3500,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'BA'
+    },
+    {
+        'employee_id': 7,
+        'employee_name': 'Employee 7',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'java',
+        'functional_skills': 'core-lifecycle,delta1',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'DEV'
+    },
+    {
+        'employee_id': 8,
+        'employee_name': 'Employee 8',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'java',
+        'functional_skills': 'delta1,core-lifecycle',
+        'cost_per_month': 3267,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'QA'
+    },
+    # Add an employee without required skills to test the marker
+    {
+        'employee_id': 9,
+        'employee_name': 'Employee 9 (No Skills)',
+        'status': 'active',
+        'grade': 'G5',
+        'location': 'Bengaluru',
+        'country': 'India',
+        'gender': 'other',
+        'technical_skills': 'python',  # Different tech skill
+        'functional_skills': 'other',  # Different functional skill
+        'cost_per_month': 3000,
+        'region': 'IN',
+        'fte_capacity': 1.0,
+        'role': 'DEV'
+    }
+])
+
+# Create projects DataFrame
+projects = pd.DataFrame([
+    {
+        'project_id': 1,
+        'project_name': 'actual vs contractual',
+        'funding_source': 'Internal',
+        'project_driver': 'Product',
+        'stakeholders': '',
+        'impact': 'High',
+        'metrics': 'quality',
+        'comments': 'Max budget 160000 (extended to 2026-12, 8x for 24 months)',
+        'max_budget': 160000,  # Increased 8x for 24 months (was 20000 for 3 months)
+        'region_preference': '',
+        'required_skills': json.dumps({
+            'technical': ['java'],
+            'functional': ['core-lifecycle', 'delta1']
+        }),
+        'start_month': '2025-01',
+        'end_month': '2026-12'
+    },
+    {
+        'project_id': 2,
+        'project_name': 'Autoreset',
+        'funding_source': 'Internal',
+        'project_driver': 'Product',
+        'stakeholders': '',
+        'impact': 'High',
+        'metrics': 'quality',
+        'comments': 'Max budget 80000 (extended to 2026-12, 8x for 24 months)',
+        'max_budget': 80000,  # Increased 8x for 24 months (was 10000 for 3 months)
+        'region_preference': '',
+        'required_skills': json.dumps({
+            'technical': ['java'],
+            'functional': ['core-lifecycle', 'delta1']
+        }),
+        'start_month': '2025-01',
+        'end_month': '2026-12'
+    },
+    {
+        'project_id': 3,
+        'project_name': 'L3 support',
+        'funding_source': 'Internal',
+        'project_driver': 'Product',
+        'stakeholders': '',
+        'impact': 'High',
+        'metrics': 'quality',
+        'comments': 'Cost 3692696 (extended to 2026-12, 8x for 24 months)',
+        'max_budget': 3692696,  # Increased 8x for 24 months (was 461587 for 3 months)
+        'region_preference': '',
+        'required_skills': json.dumps({
+            'technical': ['java'],
+            'functional': ['core-lifecycle', 'delta1']
+        }),
+        'start_month': '2025-01',
+        'end_month': '2026-12'
+    }
+])
+
+print("=" * 80)
+print("CUSTOM TEST - Projects and Employees")
+print("=" * 80)
+print(f"\nEmployees ({len(employees)}):")
+for _, emp in employees.iterrows():
+    print(f"  {emp['employee_id']}. {emp['employee_name']} ({emp['role']}) - "
+          f"Skills: {emp['technical_skills']}, {emp['functional_skills']} - "
+          f"Cost: ${emp['cost_per_month']}/month")
+
+print(f"\nProjects ({len(projects)}):")
+for _, proj in projects.iterrows():
+    req_skills = json.loads(proj['required_skills'])
+    print(f"  {proj['project_id']}. {proj['project_name']} - "
+          f"Budget: ${proj['max_budget']:,} - "
+          f"Skills: {req_skills['technical']}, {req_skills['functional']}")
+
+# Run allocator with budget maximization
+scenario_id = 1
+global_start = projects['start_month'].min()
+global_end = projects['end_month'].max()
+
+# Configure to maximize budget utilization and allow allocation without skills
+# For extended timeline, we may need to relax some constraints
+config = {
+    'maximize_budget_utilization': True,  # Maximize budget usage
+    'budget_maximization_weight_multiplier': 1.5,  # Make budget maximization 1.5x stronger than cost minimization
+    'min_budget_utilization': 0.0,  # No minimum required (can set to 0.8 for 80% minimum)
+    'allow_allocation_without_skills': True,  # Allow allocation even without matching skills
+    'no_skills_penalty_multiplier': 2.0,  # 2x cost penalty for allocations without required skills
+    'min_team_size': 0,  # Relax minimum team size for extended timeline
+}
+
+print(f"\nRunning allocator for period: {global_start} to {global_end}...")
+print("Configuration: maximize_budget_utilization = True")
+allocs = fully_optimized_allocator(
+    employees, projects, scenario_id,
+    global_start=global_start, global_end=global_end,
+    config=config
+)
+
+if not allocs or len(allocs) == 0:
+    print('\n❌ ERROR: Solver returned INFEASIBLE or no allocations')
+    print('   This means the constraints cannot be satisfied.')
+    print('   Possible reasons:')
+    print('   - Budgets too small for the extended timeline')
+    print('   - Minimum allocation constraints too restrictive')
+    print('   - Employee capacity insufficient')
+    print('\n   Try:')
+    print('   - Increasing project budgets')
+    print('   - Reducing min_budget_utilization')
+    print('   - Adjusting minimum allocation constraints')
+    exit(1)
+
+allocs_df = pd.DataFrame(allocs)
+
+# Separate actual allocations from available capacity
+actual_allocations = allocs_df[allocs_df['project_id'].notna()].copy()
+available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
+
+print(f'\nAllocation Summary:')
+print(f'  Actual allocations: {len(actual_allocations)}')
+print(f'  Total cost: ${actual_allocations["cost"].sum():,.2f}')
+print(f'  Available capacity records: {len(available_capacity)}')
+if len(available_capacity) > 0:
+    print(f'  Total available FTE: {available_capacity["allocation_fraction"].sum():.2f}')
+
+# Check for allocations without required skills
+no_skills_allocations = pd.DataFrame()
+if len(actual_allocations) > 0:
+    # Add marker column if it doesn't exist (for display)
+    if 'no_required_skills' not in actual_allocations.columns:
+        actual_allocations['no_required_skills'] = False
+    if 'no_required_skills' in actual_allocations.columns:
+        no_skills_allocations = actual_allocations[actual_allocations['no_required_skills'] == True].copy()
+        if len(no_skills_allocations) > 0:
+            print(f'\n⚠️  Warning: {len(no_skills_allocations)} allocation(s) made without required skills')
+            print(f'  Total cost of no-skills allocations: ${no_skills_allocations["cost"].sum():,.2f}')
+            print(f'  These allocations are marked in the Excel output with "no_required_skills = True"')
+    
+    # Add a clear marker column for Excel display
+    actual_allocations['Allocation_Type'] = actual_allocations.apply(
+        lambda row: 'WITHOUT REQUIRED SKILLS ⚠️' if row.get('no_required_skills', False) 
+        else ('SKILL DEVELOPMENT 📚' if row.get('skill_development', False) 
+        else 'NORMAL'), axis=1
+    )
+
+# Check for skill development allocations
+skill_dev_allocations = pd.DataFrame()
+if 'skill_development' in actual_allocations.columns:
+    skill_dev_allocations = actual_allocations[actual_allocations['skill_development'] == True].copy()
+    if len(skill_dev_allocations) > 0:
+        print(f'\n📚 Skill Development: {len(skill_dev_allocations)} allocation(s) for skill development')
+
+def generate_variance_explanations(projects, employees, actual_allocations, config):
     """Generate explanations for why projects and employees are not fully allocated."""
-    if config is None:
-        config = {}
+    import json
     
     # Calculate project explanations
     project_explanations = []
@@ -43,16 +331,12 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
         # Check if under-allocated
         if utilization < 95.0:  # Consider <95% as under-allocated
             # Reason 1: Budget too large
-            try:
-                months = pd.date_range(
-                    start=proj['start_month'] + "-01", 
-                    end=proj['end_month'] + "-01", 
-                    freq='MS'
-                ).strftime('%Y-%m').tolist()
-                num_months = len(months)
-            except:
-                num_months = 1
-            
+            months = pd.date_range(
+                start=proj['start_month'] + "-01", 
+                end=proj['end_month'] + "-01", 
+                freq='MS'
+            ).strftime('%Y-%m').tolist()
+            num_months = len(months)
             max_possible_monthly = total_employee_cost / num_months if num_months > 0 else total_employee_cost
             per_month_budget = max_budget / num_months if num_months > 0 else max_budget
             
@@ -60,12 +344,7 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
                 reasons.append(f"Budget too large: ${per_month_budget:,.0f}/month exceeds max possible ${max_possible_monthly:,.0f}/month")
             
             # Reason 2: Not enough employees with matching skills
-            req_skills = {}
-            try:
-                req_skills = json.loads(proj.get('required_skills', '{}'))
-            except:
-                pass
-            
+            req_skills = json.loads(proj.get('required_skills', '{}'))
             matching_employees = 0
             if req_skills:
                 tech_req = req_skills.get('technical', [])
@@ -140,11 +419,7 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
             emp_func = str(emp.get('functional_skills', '')).lower()
             matching_projects = 0
             for _, proj in projects.iterrows():
-                req_skills = {}
-                try:
-                    req_skills = json.loads(proj.get('required_skills', '{}'))
-                except:
-                    pass
+                req_skills = json.loads(proj.get('required_skills', '{}'))
                 tech_req = req_skills.get('technical', [])
                 func_req = req_skills.get('functional', [])
                 has_match = False
@@ -190,139 +465,6 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
     
     return project_explanations, employee_explanations
 
-
-def create_pivot_views(allocations_df):
-    """Create pivot table views with employee+project as rows and months/quarters as columns.
-    
-    Returns:
-        tuple: (monthly_pivot, quarterly_pivot)
-    """
-    # Filter to actual allocations only
-    df = allocations_df[allocations_df['project_id'].notna()].copy()
-    
-    if len(df) == 0:
-        return pd.DataFrame(), pd.DataFrame()
-    
-    # Create employee-project key
-    df['employee_project'] = df['employee_name'] + ' - ' + df['project_name']
-    
-    # Ensure month is string format
-    df['month'] = df['month'].astype(str)
-    
-    # Create monthly pivot: employee+project rows, months as columns
-    monthly_pivot = df.pivot_table(
-        index=['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project'],
-        columns='month',
-        values='allocation_fraction',
-        aggfunc='sum',
-        fill_value=0.0
-    ).reset_index()
-    
-    # Rename columns to remove 'month' from column names
-    monthly_pivot.columns.name = None
-    
-    # Create quarter mapping
-    def get_quarter(month_str):
-        """Convert YYYY-MM to quarter string (e.g., '2025-01' -> '2025-Q1')"""
-        try:
-            year, month = month_str.split('-')
-            quarter = (int(month) - 1) // 3 + 1
-            return f"{year}-Q{quarter}"
-        except:
-            return month_str
-    
-    # Add quarter column
-    df['quarter'] = df['month'].apply(get_quarter)
-    
-    # Create quarterly pivot
-    quarterly_pivot = df.pivot_table(
-        index=['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project'],
-        columns='quarter',
-        values='allocation_fraction',
-        aggfunc='sum',
-        fill_value=0.0
-    ).reset_index()
-    
-    # Rename columns to remove 'quarter' from column names
-    quarterly_pivot.columns.name = None
-    
-    # Sort columns: first the index columns, then months/quarters in order
-    def sort_columns(df_pivot, date_cols):
-        """Sort date columns chronologically"""
-        index_cols = [col for col in df_pivot.columns if col not in date_cols]
-        sorted_date_cols = sorted(date_cols)
-        return df_pivot[index_cols + sorted_date_cols]
-    
-    # Get date columns for monthly pivot
-    monthly_date_cols = [col for col in monthly_pivot.columns if col not in 
-                        ['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project']]
-    monthly_pivot = sort_columns(monthly_pivot, monthly_date_cols)
-    
-    # Get date columns for quarterly pivot
-    quarterly_date_cols = [col for col in quarterly_pivot.columns if col not in 
-                          ['employee_id', 'employee_name', 'employee_role', 'project_id', 'project_name', 'employee_project']]
-    quarterly_pivot = sort_columns(quarterly_pivot, quarterly_date_cols)
-    
-    return monthly_pivot, quarterly_pivot
-
-BASE = Path(__file__).resolve().parent
-excel_path = BASE.parent / 'excel' / 'budget_planner_template.xlsx'
-out_path = BASE.parent / 'excel' / 'budget_planner_allocations.xlsx'
-
-# create template if not exists
-if not excel_path.exists():
-    create_template(str(excel_path))
-
-# load
-xls = pd.ExcelFile(str(excel_path))
-employees = pd.read_excel(xls, 'Employees')
-projects = pd.read_excel(xls, 'Projects')
-scenarios = pd.read_excel(xls, 'Scenarios')
-
-# choose scenario id 1
-scenario_id = 1
-# run allocator for all projects between min(start_month) and max(end_month)
-global_start = projects['start_month'].min()
-global_end = projects['end_month'].max()
-
-# Default config (can be overridden)
-config = {}  # Empty config uses defaults
-
-allocs = fully_optimized_allocator(
-    employees, projects, scenario_id,
-    global_start=global_start, global_end=global_end,
-    config=config
-)
-allocs_df = pd.DataFrame(allocs)
-
-# Separate actual allocations from available capacity
-actual_allocations = allocs_df[allocs_df['project_id'].notna()].copy()
-available_capacity = allocs_df[(allocs_df['available_capacity'] == True) | (allocs_df['project_id'].isna())].copy()
-
-print(f'\nAllocation Summary:')
-print(f'  Actual allocations: {len(actual_allocations)}')
-print(f'  Total cost: ${actual_allocations["cost"].sum():,.2f}')
-print(f'  Available capacity records: {len(available_capacity)}')
-if len(available_capacity) > 0:
-    print(f'  Total available FTE: {available_capacity["allocation_fraction"].sum():.2f}')
-
-# Check for allocations without required skills
-no_skills_allocations = pd.DataFrame()
-if 'no_required_skills' in actual_allocations.columns:
-    no_skills_allocations = actual_allocations[actual_allocations['no_required_skills'] == True].copy()
-    if len(no_skills_allocations) > 0:
-        print(f'\n⚠️  Warning: {len(no_skills_allocations)} allocation(s) made without required skills')
-        print(f'  Total cost of no-skills allocations: ${no_skills_allocations["cost"].sum():,.2f}')
-        print(f'  Consider reviewing these allocations or adding employees with matching skills')
-
-# Check for skill development allocations
-skill_dev_allocations = pd.DataFrame()
-if 'skill_development' in actual_allocations.columns:
-    skill_dev_allocations = actual_allocations[actual_allocations['skill_development'] == True].copy()
-    if len(skill_dev_allocations) > 0:
-        print(f'\n📚 Skill Development: {len(skill_dev_allocations)} allocation(s) for skill development')
-        print(f'  Total FTE: {skill_dev_allocations["allocation_fraction"].sum():.2f}')
-
 # Generate variance explanations
 print('\nGenerating variance explanations...')
 project_explanations, employee_explanations = generate_variance_explanations(
@@ -330,12 +472,14 @@ project_explanations, employee_explanations = generate_variance_explanations(
 )
 
 # Create pivot views
+from run_demo import create_pivot_views
 print('\nCreating pivot views...')
 monthly_pivot, quarterly_pivot = create_pivot_views(allocs_df)
 print(f'  Monthly pivot: {len(monthly_pivot)} rows')
 print(f'  Quarterly pivot: {len(quarterly_pivot)} rows')
 
-# Write output Excel
+# Write to Excel
+print(f'\nWriting to Excel: {out_path}')
 with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
     # Original format sheets
     allocs_df.to_excel(writer, sheet_name='Allocations', index=False)
@@ -344,15 +488,15 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
     if len(available_capacity) > 0:
         available_capacity.to_excel(writer, sheet_name='Available_Capacity', index=False)
     
-    # New pivot format sheets
+    # Pivot format sheets
     if len(monthly_pivot) > 0:
         monthly_pivot.to_excel(writer, sheet_name='Monthly_View', index=False)
-        print('  ✓ Created Monthly_View sheet (employee+project rows, month columns)')
+        print('  ✓ Created Monthly_View sheet')
     if len(quarterly_pivot) > 0:
         quarterly_pivot.to_excel(writer, sheet_name='Quarterly_View', index=False)
-        print('  ✓ Created Quarterly_View sheet (employee+project rows, quarter columns)')
+        print('  ✓ Created Quarterly_View sheet')
     
-    # Skill gap report
+    # Skill gap reporting
     if len(no_skills_allocations) > 0:
         no_skills_allocations.to_excel(writer, sheet_name='No_Skills_Allocations', index=False)
         print('  ✓ Created No_Skills_Allocations sheet (allocations without required skills)')
@@ -388,13 +532,14 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
         
         # Reorder columns to put budget info near max_budget
         cols = list(projects_with_budget.columns)
+        # Move budget columns after max_budget
         budget_cols = ['allocated_cost', 'remaining_budget', 'budget_utilization_pct', 'explanation_of_variance']
         other_cols = [c for c in cols if c not in budget_cols]
-        if 'max_budget' in other_cols:
-            max_budget_idx = other_cols.index('max_budget')
-            new_cols = other_cols[:max_budget_idx+1] + budget_cols + other_cols[max_budget_idx+1:]
-            projects_with_budget = projects_with_budget[new_cols]
+        max_budget_idx = other_cols.index('max_budget')
+        new_cols = other_cols[:max_budget_idx+1] + budget_cols + other_cols[max_budget_idx+1:]
+        projects_with_budget = projects_with_budget[new_cols]
     else:
+        # No allocations, set defaults
         projects_with_budget['allocated_cost'] = 0.0
         projects_with_budget['remaining_budget'] = projects_with_budget['max_budget']
         projects_with_budget['budget_utilization_pct'] = 0.0
@@ -420,7 +565,7 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
         employees_with_allocation['total_allocated_cost'] = employees_with_allocation['total_allocated_cost'].fillna(0.0)
         employees_with_allocation['total_allocated_fte'] = employees_with_allocation['total_allocated_fte'].fillna(0.0)
         
-        # Calculate utilization percentage
+        # Calculate utilization percentage (allocated FTE / capacity)
         employees_with_allocation['fte_utilization_pct'] = (
             (employees_with_allocation['total_allocated_fte'] / employees_with_allocation['fte_capacity'] * 100)
             .round(2)
@@ -434,15 +579,15 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
         # Add explanation of variance
         employees_with_allocation['explanation_of_variance'] = employee_explanations
         
-        # Reorder columns
+        # Reorder columns to put allocation info near cost_per_month
         cols = list(employees_with_allocation.columns)
         alloc_cols = ['total_allocated_cost', 'total_allocated_fte', 'fte_utilization_pct', 'remaining_fte_capacity', 'explanation_of_variance']
         other_cols = [c for c in cols if c not in alloc_cols]
-        if 'cost_per_month' in other_cols:
-            cost_idx = other_cols.index('cost_per_month')
-            new_cols = other_cols[:cost_idx+1] + alloc_cols + other_cols[cost_idx+1:]
-            employees_with_allocation = employees_with_allocation[new_cols]
+        cost_idx = other_cols.index('cost_per_month')
+        new_cols = other_cols[:cost_idx+1] + alloc_cols + other_cols[cost_idx+1:]
+        employees_with_allocation = employees_with_allocation[new_cols]
     else:
+        # No allocations, set defaults
         employees_with_allocation['total_allocated_cost'] = 0.0
         employees_with_allocation['total_allocated_fte'] = 0.0
         employees_with_allocation['fte_utilization_pct'] = 0.0
@@ -453,77 +598,34 @@ with pd.ExcelWriter(str(out_path), engine='openpyxl') as writer:
     employees_with_allocation.to_excel(writer, sheet_name='Employees', index=False)
     projects_with_budget.to_excel(writer, sheet_name='Projects', index=False)
 
-print('✓ Excel output written to', out_path)
+print(f'\n✓ Excel output written to {out_path}')
 
-# Optionally save to database
-save_to_db = os.getenv('SAVE_TO_DB', 'false').lower() == 'true'
-if save_to_db:
-    try:
-        print('\nSaving to database...')
-        # Connect to database
-        db_server = os.getenv('DB_SERVER', 'localhost\\SQLEXPRESS')
-        db_name = os.getenv('DB_NAME', 'budgetdb')
-        db_user = os.getenv('DB_USER', None)
-        db_password = os.getenv('DB_PASSWORD', None)
-        use_trusted = db_user is None or db_user == ''
-        
-        conn = connect(
-            server=db_server,
-            database=db_name,
-            trusted=use_trusted,
-            user=db_user,
-            password=db_password
-        )
-        
-        # Create scenario if it doesn't exist
-        scenario_name = f"Scenario {scenario_id}"
-        created_by = os.getenv('CREATED_BY', 'system')
-        
-        # Check if scenario exists
-        try:
-            existing_scenarios = load_table(conn, 'scenario')
-            if scenario_id not in existing_scenarios['scenario_id'].values:
-                new_scenario_id = create_scenario(conn, scenario_name, created_by)
-                print(f'  Created scenario: {new_scenario_id} - {scenario_name}')
-            else:
-                print(f'  Using existing scenario: {scenario_id} - {scenario_name}')
-        except Exception as e:
-            print(f'  Note: Could not check existing scenarios: {e}')
-            # Try to create scenario anyway
-            try:
-                new_scenario_id = create_scenario(conn, scenario_name, created_by)
-                print(f'  Created scenario: {new_scenario_id} - {scenario_name}')
-            except:
-                pass
-        
-        # Save only actual allocations (not available capacity) to database
-        if len(actual_allocations) > 0:
-            # Filter out available capacity records
-            db_allocations = actual_allocations[actual_allocations['project_id'].notna()].copy()
-            
-            # Ensure required columns exist
-            if 'scenario_id' not in db_allocations.columns:
-                db_allocations['scenario_id'] = scenario_id
-            
-            write_allocations(conn, db_allocations)
-            print(f'  ✓ Saved {len(db_allocations)} allocations to database')
-        
-        # Record history
-        if len(actual_allocations) > 0:
-            record_history(
-                conn, scenario_id, 'allocation', None,
-                None, {'count': len(actual_allocations), 'total_cost': float(actual_allocations['cost'].sum())},
-                created_by
-            )
-            print(f'  ✓ Recorded history log')
-        
-        conn.close()
-        print('✓ Database save complete')
-        
-    except Exception as e:
-        print(f'  ⚠ Warning: Could not save to database: {e}')
-        print('  Set SAVE_TO_DB=true and configure database connection to enable DB saving')
-else:
-    print('\nNote: Database saving is disabled. Set SAVE_TO_DB=true to enable.')
+# Show detailed allocation breakdown
+print('\n' + '=' * 80)
+print('DETAILED ALLOCATION BREAKDOWN')
+print('=' * 80)
+if len(actual_allocations) > 0:
+    print('\nBy Project:')
+    for proj_id in actual_allocations['project_id'].unique():
+        proj_allocs = actual_allocations[actual_allocations['project_id'] == proj_id]
+        proj_name = proj_allocs.iloc[0]['project_name']
+        print(f'\n  {proj_name} (ID: {proj_id}):')
+        print(f'    Total FTE: {proj_allocs["allocation_fraction"].sum():.2f}')
+        print(f'    Total Cost: ${proj_allocs["cost"].sum():,.2f}')
+        print(f'    Allocations:')
+        for _, alloc in proj_allocs.iterrows():
+            print(f'      - {alloc["employee_name"]} ({alloc["employee_role"]}): '
+                  f'{alloc["allocation_fraction"]:.2f} FTE in {alloc["month"]} = ${alloc["cost"]:,.2f}')
+    
+    print('\nBy Employee:')
+    for emp_id in actual_allocations['employee_id'].unique():
+        emp_allocs = actual_allocations[actual_allocations['employee_id'] == emp_id]
+        emp_name = emp_allocs.iloc[0]['employee_name']
+        print(f'\n  {emp_name} (ID: {emp_id}):')
+        print(f'    Total FTE: {emp_allocs["allocation_fraction"].sum():.2f}')
+        print(f'    Total Cost: ${emp_allocs["cost"].sum():,.2f}')
+        print(f'    Projects: {", ".join(emp_allocs["project_name"].unique())}')
 
-print('\nDemo run complete!')
+print('\n' + '=' * 80)
+print('Test complete!')
+print('=' * 80)
