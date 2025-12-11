@@ -288,7 +288,7 @@ global_start = projects['start_month'].min()
 global_end = projects['end_month'].max()
 
 # Load configuration from file or use shared defaults
-# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) allocator_config_shared.json/yaml, 4) empty config
+# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) allocator_config_shared.json/yaml, 4) inline defaults
 # Usage: python run_demo.py [config_file_path]
 config_path = sys.argv[1] if len(sys.argv) > 1 else None
 try:
@@ -297,14 +297,49 @@ try:
         print(f"✓ Loaded configuration from file")
     else:
         print("ℹ Using default configuration (no config file found)")
-        config = {}  # Empty config uses allocator built-in defaults
+        # Fallback to inline defaults (same as shared config)
+        config = {
+            'maximize_budget_utilization': True,
+            'budget_maximization_weight_multiplier': 50.0,  # Very strongly prioritize budget utilization
+            'min_budget_utilization': 0.0,
+            'allow_allocation_without_skills': True,
+            'no_skills_penalty_multiplier': 1.0,  # Minimal penalty - just slight preference for skills
+            'min_team_size': 0,
+            'max_employee_per_project': 1.0,  # Allow full allocation to projects (100% of capacity)
+            'enforce_role_allocation': False,  # Disable role constraints to allow more flexible allocation
+        }
 except Exception as e:
     print(f"⚠ Warning: Could not load config file: {e}")
-    print("   Using default configuration (empty config)")
-    config = {}  # Empty config uses allocator built-in defaults
+    print("   Using inline default configuration")
+    config = {
+        'maximize_budget_utilization': True,
+        'budget_maximization_weight_multiplier': 50.0,
+        'min_budget_utilization': 0.0,
+        'allow_allocation_without_skills': True,
+        'no_skills_penalty_multiplier': 1.0,
+        'min_team_size': 0,
+        'max_employee_per_project': 1.0,
+        'enforce_role_allocation': False,
+    }
 
-# Load weights from config if present
+# Load weights from config if present, otherwise use defaults optimized for budget maximization
 weights = get_weights(config)
+if weights is None:
+    # Default weights to prioritize budget utilization - minimize all penalty terms
+    weights = {
+        'cost_weight': 0.0,  # Disabled - budget maximization handles this
+        'skill_weight': 0.0,  # Disabled - allow allocations without perfect skill matches
+        'fragmentation_weight': 0.0,  # Disabled
+        'continuity_weight': 0.0,  # Disabled
+        'balance_weight': 0.0,  # Disabled - allow full allocation to employees
+        'preference_weight': 0.0,  # Disabled
+        'diversity_weight': 0.0,  # Disabled
+        'leveling_weight': 0.0,  # Disabled
+        'role_balance_weight': 0.05  # Encourage role allocation ratios when possible
+    }
+    print("ℹ Using default weights optimized for budget maximization")
+else:
+    print("✓ Loaded weights from configuration")
 allocs = fully_optimized_allocator(
     employees, projects, scenario_id,
     global_start=global_start, global_end=global_end,

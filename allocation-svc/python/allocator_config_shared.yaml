@@ -32,7 +32,9 @@ enable_team_diversity: true
 enable_employee_preferences: true
 
 # Role-Based Allocation
-enforce_role_allocation: false  # Disable role constraints to allow more flexible allocation
+# Note: enforce_role_allocation is false to avoid hard constraints that could cause infeasibility
+# However, role_balance_weight > 0 will encourage meeting target ratios when possible
+enforce_role_allocation: false  # Soft constraints only (via role_balance_weight)
 min_role_allocation:
   DEV: 0.0
   QA: 0.0
@@ -43,8 +45,8 @@ role_allocation_ratios:
   BA: 0.20
 
 # Objective Function Weights
-# All weights set to 0.0 to prioritize budget maximization over other objectives
-# This allows full employee allocation without penalty terms interfering
+# Most weights set to 0.0 to prioritize budget maximization
+# role_balance_weight is set to a positive value to encourage role ratios when possible
 weights:
   cost_weight: 0.0  # Disabled - budget maximization handles this
   skill_weight: 0.0  # Disabled - allow allocations without perfect skill matches
@@ -54,4 +56,4 @@ weights:
   preference_weight: 0.0  # Disabled
   diversity_weight: 0.0  # Disabled
   leveling_weight: 0.0  # Disabled
-  role_balance_weight: 0.0  # Disabled since enforce_role_allocation is False
+  role_balance_weight: 0.05  # Encourage role allocation ratios when possible (soft constraint)

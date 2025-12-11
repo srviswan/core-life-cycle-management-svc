@@ -272,6 +272,7 @@ print("Configuration: maximize_budget_utilization = True")
 custom_weights = get_weights(config)
 if custom_weights is None:
     # Default weights to prioritize budget utilization - minimize all penalty terms
+    # role_balance_weight is set to encourage role ratios when possible
     custom_weights = {
         'cost_weight': 0.0,  # Disabled - budget maximization handles this
         'skill_weight': 0.0,  # Disabled - allow allocations without perfect skill matches
@@ -281,7 +282,7 @@ if custom_weights is None:
         'preference_weight': 0.0,  # Disabled
         'diversity_weight': 0.0,  # Disabled
         'leveling_weight': 0.0,  # Disabled
-        'role_balance_weight': 0.0  # Disabled since enforce_role_allocation is False
+        'role_balance_weight': 0.05  # Encourage role allocation ratios when possible
     }
     print("ℹ Using default weights optimized for budget maximization")
 else:

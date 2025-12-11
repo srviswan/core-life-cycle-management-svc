@@ -614,7 +614,9 @@ def fully_optimized_allocator(
             objective.SetCoefficient(div_penalty, avg_cost * weights['diversity_weight'])
     
     # 9. Role allocation balance (penalty for deviation from target ratios)
-    if config.get('enforce_role_allocation', False) and weights.get('role_balance_weight', 0) > 0:
+    # Apply role balance weight if specified, even if enforce_role_allocation is False
+    # This allows soft encouragement of role ratios without hard constraints
+    if weights.get('role_balance_weight', 0) > 0:
         role_ratios = config.get('role_allocation_ratios', {'DEV': 0.50, 'QA': 0.30, 'BA': 0.20})
         role_balance_penalties = {}
         

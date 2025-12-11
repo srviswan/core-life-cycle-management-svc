@@ -36,6 +36,7 @@
     "BA": 0.20
   },
   
+  "_comment_weights": "role_balance_weight encourages role ratios when possible (soft constraint)",
   "weights": {
     "cost_weight": 0.0,
     "skill_weight": 0.0,
@@ -45,6 +46,6 @@
     "preference_weight": 0.0,
     "diversity_weight": 0.0,
     "leveling_weight": 0.0,
-    "role_balance_weight": 0.0
+    "role_balance_weight": 0.05
   }
 }
