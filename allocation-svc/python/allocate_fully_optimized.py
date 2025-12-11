@@ -676,6 +676,7 @@ def fully_optimized_allocator(
     # CONSTRAINTS
     
     # Constraint 1: Employee capacity per month
+    # Limits each employee's total allocation across all projects per month to their fte_capacity
     for eid in employee_ids:
         emp_row = active_employees[active_employees['employee_id'] == eid].iloc[0]
         capacity = float(emp_row['fte_capacity'])
@@ -694,6 +695,43 @@ def fully_optimized_allocator(
                             constraint.SetCoefficient(var, 1.0)
                     
                     # Skill development allocations
+                    sd_var = skill_dev_variables.get((eid, pid, month))
+                    if sd_var is not None:
+                        constraint.SetCoefficient(sd_var, 1.0)
+    
+    # Constraint 1b: Employee average allocation per year (max 1.0 FTE average per month)
+    # This ensures that the average allocation per month for an employee across all projects 
+    # in a calendar year does not exceed 1.0 FTE.
+    # Formula: (Sum of all allocations across all months) / (number of months) <= 1.0
+    # Equivalently: Sum of all allocations <= number of months
+    # Example: 12 months, total allocation can be up to 12.0 FTE-months (1.0 FTE per month average)
+    # Example: If allocated 0.5 FTE in Jan and 0.5 FTE in Feb, average = 1.0 FTE/month ✓
+    # Example: If allocated 1.0 FTE every month for 12 months, total = 12.0 FTE-months, average = 1.0 FTE/month ✓
+    months_by_year = defaultdict(list)
+    for month in all_months:
+        year = month.split('-')[0]  # Extract year from YYYY-MM format
+        months_by_year[year].append(month)
+    
+    for eid in employee_ids:
+        for year, year_months in months_by_year.items():
+            num_months = len(year_months)
+            # Constraint: Sum of all allocations (regular + skill development) for this 
+            # employee across all projects and all months in this year <= num_months
+            # This ensures average allocation per month <= 1.0 FTE
+            constraint = solver.Constraint(0.0, float(num_months), f'yearly_avg_capacity_e{eid}_y{year}')
+            
+            for pid, month in project_months:
+                if month in year_months:
+                    var = variables.get((eid, pid, month))
+                    if var is not None:
+                        if config['discrete_allocations']:
+                            # For discrete, use max increment to convert level to FTE
+                            max_inc = max(config['allocation_increments'])
+                            constraint.SetCoefficient(var, max_inc)
+                        else:
+                            constraint.SetCoefficient(var, 1.0)
+                    
+                    # Skill development allocations also count toward yearly limit
                     sd_var = skill_dev_variables.get((eid, pid, month))
                     if sd_var is not None:
                         constraint.SetCoefficient(sd_var, 1.0)
