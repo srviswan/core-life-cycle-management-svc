@@ -32,7 +32,7 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
     total_employee_cost = employees['cost_per_month'].mean() * total_employee_capacity
     
     for _, proj in projects.iterrows():
-        pid = int(proj['project_id'])
+        pid = proj['project_id']
         max_budget = float(proj['max_budget'])
         allocated_cost = project_costs.get(pid, 0.0)
         allocated_fte = project_fte.get(pid, 0.0)
@@ -120,7 +120,7 @@ def generate_variance_explanations(projects, employees, actual_allocations, conf
         employee_projects = pd.Series(dtype=int)
     
     for _, emp in employees.iterrows():
-        eid = int(emp['employee_id'])
+        eid = emp['employee_id']
         capacity = float(emp['fte_capacity'])
         allocated_fte = employee_fte.get(eid, 0.0)
         utilization = (allocated_fte / capacity * 100) if capacity > 0 else 0
