@@ -1,8 +1,10 @@
 """run_custom_test.py - Custom test with specific projects and employees"""
 import pandas as pd
 import json
+import sys
 from pathlib import Path
 from allocate_fully_optimized import fully_optimized_allocator
+from config_loader import get_config
 
 BASE = Path(__file__).resolve().parent
 out_path = BASE.parent / 'excel' / 'custom_test_allocations.xlsx'
@@ -229,14 +231,35 @@ global_end = projects['end_month'].max()
 
 # Configure to maximize budget utilization and allow allocation without skills
 # For extended timeline, we may need to relax some constraints
-config = {
-    'maximize_budget_utilization': True,  # Maximize budget usage
-    'budget_maximization_weight_multiplier': 1.5,  # Make budget maximization 1.5x stronger than cost minimization
-    'min_budget_utilization': 0.0,  # No minimum required (can set to 0.8 for 80% minimum)
-    'allow_allocation_without_skills': True,  # Allow allocation even without matching skills
-    'no_skills_penalty_multiplier': 2.0,  # 2x cost penalty for allocations without required skills
-    'min_team_size': 0,  # Relax minimum team size for extended timeline
-}
+# Load configuration from file or use inline defaults
+# Priority: 1) Command line arg, 2) allocator_config.json/yaml, 3) inline defaults
+config_path = sys.argv[1] if len(sys.argv) > 1 else None
+try:
+    config = get_config(config_path, validate=True)
+    if config:
+        print(f"✓ Loaded configuration from file")
+    else:
+        print("ℹ Using default configuration (no config file found)")
+        # Fallback to inline defaults
+        config = {
+            'maximize_budget_utilization': True,
+            'budget_maximization_weight_multiplier': 1.5,
+            'min_budget_utilization': 0.0,
+            'allow_allocation_without_skills': True,
+            'no_skills_penalty_multiplier': 2.0,
+            'min_team_size': 0,
+        }
+except Exception as e:
+    print(f"⚠ Warning: Could not load config file: {e}")
+    print("   Using inline default configuration")
+    config = {
+        'maximize_budget_utilization': True,
+        'budget_maximization_weight_multiplier': 1.5,
+        'min_budget_utilization': 0.0,
+        'allow_allocation_without_skills': True,
+        'no_skills_penalty_multiplier': 2.0,
+        'min_team_size': 0,
+    }
 
 print(f"\nRunning allocator for period: {global_start} to {global_end}...")
 print("Configuration: maximize_budget_utilization = True")

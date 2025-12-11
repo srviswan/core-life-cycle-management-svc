@@ -3,11 +3,13 @@ This script uses the excel template to load data, run allocator, and write alloc
 """
 import pandas as pd, json
 import os
+import sys
 from pathlib import Path
 from allocate_fully_optimized import fully_optimized_allocator
 from excel_io import create_template
 from db import connect, write_allocations, load_table
 from scenario import create_scenario, record_history
+from config_loader import get_config
 
 
 def generate_variance_explanations(projects, employees, actual_allocations, config=None):
@@ -285,8 +287,17 @@ scenario_id = 1
 global_start = projects['start_month'].min()
 global_end = projects['end_month'].max()
 
-# Default config (can be overridden)
-config = {}  # Empty config uses defaults
+# Load configuration from file or use defaults
+# Usage: python run_demo.py [config_file_path]
+config_path = sys.argv[1] if len(sys.argv) > 1 else None
+try:
+    config = get_config(config_path, validate=True)
+    if config:
+        print(f"✓ Loaded configuration from file")
+except Exception as e:
+    print(f"⚠ Warning: Could not load config file: {e}")
+    print("   Using default configuration (empty config)")
+    config = {}  # Empty config uses defaults
 
 allocs = fully_optimized_allocator(
     employees, projects, scenario_id,
