@@ -126,6 +126,7 @@ def validate_config(config: Dict[str, Any]) -> None:
         'enable_team_diversity',
         'enable_employee_preferences',
         'enforce_role_allocation',
+        'waterfall_allocation',
     ]
     
     for opt in bool_options:
@@ -162,6 +163,21 @@ def validate_config(config: Dict[str, Any]) -> None:
         val = config['skill_dev_max_fte']
         if not isinstance(val, (int, float)) or val < 0 or val > 1:
             raise ValueError(f"skill_dev_max_fte must be between 0 and 1, got {val}")
+    
+    if 'waterfall_allocation' in config:
+        val = config['waterfall_allocation']
+        if not isinstance(val, bool):
+            raise ValueError(f"waterfall_allocation must be a boolean, got {type(val).__name__}")
+    
+    if 'priority_waterfall_multiplier' in config:
+        val = config['priority_waterfall_multiplier']
+        if not isinstance(val, (int, float)) or val < 1.0:
+            raise ValueError(f"priority_waterfall_multiplier must be >= 1.0, got {val}")
+    
+    if 'waterfall_min_allocation_threshold' in config:
+        val = config['waterfall_min_allocation_threshold']
+        if not isinstance(val, (int, float)) or val < 0 or val > 1:
+            raise ValueError(f"waterfall_min_allocation_threshold must be between 0 and 1, got {val}")
     
     # Validate dictionaries
     if 'min_role_allocation' in config:
@@ -201,7 +217,13 @@ def validate_config(config: Dict[str, Any]) -> None:
         for key, weight_val in val.items():
             if key not in valid_weight_keys:
                 raise ValueError(f"Unknown weight key: {key}. Valid keys: {valid_weight_keys}")
-            if not isinstance(weight_val, (int, float)) or weight_val < 0:
+            # Allow 0.0 (zero is valid - it just disables that objective component)
+            if not isinstance(weight_val, (int, float)):
+                raise ValueError(
+                    f"weights[{key}] must be a number (int or float), "
+                    f"got {type(weight_val).__name__}: {weight_val!r}"
+                )
+            if weight_val < 0:
                 raise ValueError(f"weights[{key}] must be >= 0, got {weight_val}")
 
 

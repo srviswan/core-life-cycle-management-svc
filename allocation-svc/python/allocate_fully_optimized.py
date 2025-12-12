@@ -159,6 +159,9 @@ def fully_optimized_allocator(
         'maximize_budget_utilization': False,  # Maximize budget usage (adds negative cost term to objective)
         'budget_maximization_weight_multiplier': 1.0,  # Multiplier for budget maximization weight (1.0 = same as cost weight)
         'min_budget_utilization': 0.0,  # Minimum budget utilization (0.0-1.0) - adds constraint to use at least X% of budget
+        'waterfall_allocation': False,  # New: Waterfall logic - allocate high priority projects first
+        'priority_waterfall_multiplier': 100.0,  # Multiplier for priority in waterfall mode (higher = stronger preference)
+        'waterfall_min_allocation_threshold': 0.0,  # Minimum allocation % for higher priority before lower priority can be allocated (0.0-1.0)
         'role_allocation_ratios': {  # New: Required role proportions
             'DEV': 0.50,  # 50% of project allocation should be DEV
             'QA': 0.30,   # 30% should be QA
@@ -252,7 +255,27 @@ def fully_optimized_allocator(
         per_month_budget = max_budget / max(1, len(months)) if months else 0.0
         region_pref = str(proj.get('region_preference') or '')
         impact = str(proj.get('impact') or 'Medium').lower()
-        priority = {'high': 3, 'medium': 2, 'low': 1}.get(impact, 2)
+        priority = {'blocker': 4, 'high': 3, 'medium': 2, 'low': 1}.get(impact, 2)
+        
+        # Parse allowed roles for this project (if specified)
+        # Format: comma-separated list like "BA" or "BA,DEV" or list ["BA"]
+        allowed_roles_raw = proj.get('allowed_roles') or proj.get('required_roles') or None
+        allowed_roles = None
+        if allowed_roles_raw:
+            if isinstance(allowed_roles_raw, str):
+                # Parse comma-separated string
+                allowed_roles = [r.strip().upper() for r in allowed_roles_raw.split(',') if r.strip()]
+            elif isinstance(allowed_roles_raw, list):
+                # Already a list
+                allowed_roles = [str(r).strip().upper() for r in allowed_roles_raw if r]
+            # Normalize to standard role names
+            if allowed_roles:
+                # Map common variations
+                role_map = {'DEVELOPER': 'DEV', 'DEVELOPERS': 'DEV', 'DEV': 'DEV',
+                           'QA': 'QA', 'TESTER': 'QA', 'TESTERS': 'QA', 'QUALITY': 'QA',
+                           'BA': 'BA', 'BUSINESS ANALYST': 'BA', 'BUSINESS ANALYSTS': 'BA', 'ANALYST': 'BA'}
+                allowed_roles = [role_map.get(r, r) for r in allowed_roles]
+                allowed_roles = [r for r in allowed_roles if r in ['DEV', 'QA', 'BA']]  # Only valid roles
         
         project_data[int(proj['project_id'])] = {
             'required_skills': req_skills,
@@ -260,7 +283,8 @@ def fully_optimized_allocator(
             'total_budget': max_budget,
             'region_preference': region_pref,
             'priority': priority,
-            'months': months
+            'months': months,
+            'allowed_roles': allowed_roles  # None means all roles allowed, list means only these roles
         }
         
         for m in months:
@@ -301,6 +325,14 @@ def fully_optimized_allocator(
             proj_info = project_data[pid]
             req_skills = proj_info['required_skills']
             has_skills = _employee_has_required_skills(emp_row, req_skills)
+            
+            # Check if employee's role is allowed for this project
+            allowed_roles = proj_info.get('allowed_roles')
+            emp_role = emp_row.get('role', 'DEV').upper()
+            if allowed_roles is not None and len(allowed_roles) > 0:
+                if emp_role not in allowed_roles:
+                    # Employee's role is not allowed for this project - skip variable creation
+                    continue
             
             # Regular allocation (if has skills)
             if has_skills:
@@ -549,7 +581,15 @@ def fully_optimized_allocator(
                 if proj_info['region_preference'] and emp_row['region'] != proj_info['region_preference']:
                     region_penalty = cost * 0.1
                 
-                priority_factor = 1.0 / proj_info['priority']
+                # Priority factor: higher priority = lower factor (preferred)
+                # In waterfall mode, apply multiplier to strongly prefer high priority
+                base_priority_factor = 1.0 / proj_info['priority']
+                if config.get('waterfall_allocation', False):
+                    waterfall_mult = config.get('priority_waterfall_multiplier', 100.0)
+                    # Higher priority projects get much lower factor (strongly preferred)
+                    priority_factor = base_priority_factor / waterfall_mult
+                else:
+                    priority_factor = base_priority_factor
                 
                 # Check if this is an allocation without required skills
                 has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
@@ -570,12 +610,22 @@ def fully_optimized_allocator(
     max_skill_score = max(skill_scores.values()) if skill_scores else 1.0
     for (eid, pid, month), var in variables.items():
         if var is not None:
+            proj_info = project_data[pid]
             skill_qual = skill_scores.get((eid, pid), 0.0)
             skill_penalty = (max_skill_score - skill_qual) / max_skill_score if max_skill_score > 0 else 0
-            if config['discrete_allocations']:
-                objective.SetCoefficient(var, skill_penalty * avg_cost * weights['skill_weight'] * 0.5)
+            
+            # Apply priority factor in waterfall mode
+            if config.get('waterfall_allocation', False):
+                base_priority_factor = 1.0 / proj_info['priority']
+                waterfall_mult = config.get('priority_waterfall_multiplier', 100.0)
+                priority_factor = base_priority_factor / waterfall_mult
             else:
-                objective.SetCoefficient(var, skill_penalty * avg_cost * weights['skill_weight'])
+                priority_factor = 1.0
+            
+            if config['discrete_allocations']:
+                objective.SetCoefficient(var, skill_penalty * avg_cost * weights['skill_weight'] * priority_factor * 0.5)
+            else:
+                objective.SetCoefficient(var, skill_penalty * avg_cost * weights['skill_weight'] * priority_factor)
     
     # 3. Fragmentation penalty
     if weights['fragmentation_weight'] > 0:
@@ -680,7 +730,15 @@ def fully_optimized_allocator(
                 if proj_info['region_preference'] and emp_row['region'] != proj_info['region_preference']:
                     region_penalty = cost * 0.1
                 
-                priority_factor = 1.0 / proj_info['priority']
+                # Priority factor: higher priority = lower factor (preferred)
+                # In waterfall mode, apply multiplier to strongly prefer high priority
+                base_priority_factor = 1.0 / proj_info['priority']
+                if config.get('waterfall_allocation', False):
+                    waterfall_mult = config.get('priority_waterfall_multiplier', 100.0)
+                    # Higher priority projects get much lower factor (strongly preferred)
+                    priority_factor = base_priority_factor / waterfall_mult
+                else:
+                    priority_factor = base_priority_factor
                 
                 # Check if this is an allocation without required skills
                 has_skills_for_proj = skill_scores.get((eid, pid), 0.0) > 0.0
@@ -830,6 +888,30 @@ def fully_optimized_allocator(
                                 min_constraint.SetCoefficient(var, cost * 0.5)
                             else:
                                 min_constraint.SetCoefficient(var, cost)
+    
+    # Note: Waterfall allocation is implemented via priority multipliers in the objective function
+    # This provides soft constraints that strongly prefer high priority projects
+    # Hard constraints can be added in the future if needed via waterfall_min_allocation_threshold
+    
+    # Constraint 2.5: Per-project role restrictions - Only allow specified roles to specific projects
+    # Note: Variables for disallowed roles are not created above, but we add constraints here as a safety measure
+    # for any variables that might have been created before the role check
+    for pid, proj_info in project_data.items():
+        allowed_roles = proj_info.get('allowed_roles')
+        if allowed_roles is not None and len(allowed_roles) > 0:
+            # This project only allows specific roles
+            months_list = project_months_map[pid]
+            disallowed_roles = [r for r in ['DEV', 'QA', 'BA'] if r not in allowed_roles]
+            
+            for month in months_list:
+                for disallowed_role in disallowed_roles:
+                    # Set allocation to 0 for employees with disallowed roles (safety constraint)
+                    for eid in employees_by_role.get(disallowed_role, []):
+                        var = variables.get((eid, pid, month))
+                        if var is not None:
+                            # Constraint: allocation = 0 (not allowed)
+                            constraint = solver.Constraint(0.0, 0.0, f'role_restrict_e{eid}_p{pid}_m{month}_no{disallowed_role}')
+                            constraint.SetCoefficient(var, 1.0)
     
     # Constraint 3: Risk mitigation - Max allocation per employee per project
     if config['max_employee_per_project'] < 1.0:
