@@ -89,11 +89,13 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         
         allocated_budget = proj_allocations['allocated_cost'].sum()
         allocated_fte = proj_allocations_with_fte['fte_allocated'].sum()
+        months_active = len(set(proj_allocations['month']))
+        # Average FTE = total FTE-months / number of months allocated
+        annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
         total_budget = float(proj_row.get('alloc_budget', 0))
         budget_utilization = (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0
         
         priority_score = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
-        months_active = len(set(proj_allocations['month']))
         resources_allocated = len(set(proj_allocations['resource_id']))
         
         effort_estimate = float(proj_row.get('effort_estimate_man_months', 0)) if pd.notna(proj_row.get('effort_estimate_man_months')) else None
@@ -104,6 +106,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
             'priority_score': priority_score,
             'total_budget': total_budget,
             'allocated_fte': allocated_fte,
+            'annual_fte_allocated': annual_fte_allocated,
             'allocated_cost': allocated_budget,
             'budget_utilization_pct': budget_utilization,
             'months_active': months_active,
@@ -129,17 +132,21 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         # FTE = allocated_cost / monthly_cost (for each month, then sum)
         total_fte_allocated = 0.0
         if monthly_cost > 0:
-            # Sum FTE across all allocations
+            # Sum FTE across all allocations (total FTE-months)
             total_fte_allocated = resource_allocations['allocated_cost'].sum() / monthly_cost
         
         projects_allocated = len(set(resource_allocations['project_id']))
         months_active = len(set(resource_allocations['month']))
+        
+        # Average FTE = total FTE-months / number of months allocated
+        annual_fte_allocated = total_fte_allocated / months_active if months_active > 0 and total_fte_allocated > 0 else 0.0
         
         resource_summary_data.append({
             'resource_id': resource_id,
             'resource_name': str(resource_row.get('employee_name', resource_id)),
             'total_allocated_cost': total_allocated_cost,
             'total_fte_allocated': total_fte_allocated,
+            'annual_fte_allocated': annual_fte_allocated,
             'fte_cost_per_month': monthly_cost,
             'annual_cost': annual_cost,
             'utilization_pct': utilization_pct,
@@ -159,27 +166,45 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         fill_value=0
     ).reset_index()
     
-    # Calculate total cost for each resource (sum across all months)
-    resource_total_costs = allocs_df.groupby(['resource_id', 'resource_name'])['allocated_cost'].sum().reset_index()
-    resource_total_costs.columns = ['resource_id', 'resource_name', 'total_cost']
+    # Calculate total cost and total FTE for each resource (sum across all months)
+    resource_totals = allocs_df.groupby(['resource_id', 'resource_name']).agg({
+        'allocated_cost': 'sum'
+    }).reset_index()
+    resource_totals.columns = ['resource_id', 'resource_name', 'total_cost']
     
-    # Merge FTE view with total cost
+    # Calculate total FTE for each resource
+    resource_fte_totals = allocs_with_fte.groupby(['resource_id', 'resource_name'])['fte_allocated'].sum().reset_index()
+    resource_fte_totals.columns = ['resource_id', 'resource_name', 'total_fte']
+    
+    # Merge FTE view with total cost and total FTE
     monthly_view = monthly_view_fte.merge(
-        resource_total_costs,
+        resource_totals,
+        on=['resource_id', 'resource_name'],
+        how='left'
+    ).merge(
+        resource_fte_totals,
         on=['resource_id', 'resource_name'],
         how='left'
     )
     monthly_view['total_cost'] = monthly_view['total_cost'].fillna(0.0)
+    monthly_view['total_fte'] = monthly_view['total_fte'].fillna(0.0)
     
-    # Reorder columns: resource info, then months (FTE only), then total_cost at the end
-    base_cols = ['resource_id', 'resource_name']
+    # Add resource+allocation column (resource_name with total FTE and cost)
+    monthly_view['resource_allocation'] = (
+        monthly_view['resource_name'].astype(str) + 
+        ' (FTE: ' + monthly_view['total_fte'].round(2).astype(str) + 
+        ', Cost: $' + monthly_view['total_cost'].round(2).astype(str) + ')'
+    )
+    
+    # Reorder columns: resource info, resource+allocation, then months (FTE only), then totals at the end
+    base_cols = ['resource_id', 'resource_name', 'resource_allocation']
     
     # Get all month columns (sorted)
     month_cols = sorted([col for col in monthly_view.columns 
-                        if col not in base_cols and col != 'total_cost'])
+                        if col not in base_cols and col not in ['total_cost', 'total_fte']])
     
-    # Build ordered column list: resource info, months, then total_cost
-    ordered_cols = base_cols + month_cols + ['total_cost']
+    # Build ordered column list: resource info, resource+allocation, months, then totals
+    ordered_cols = base_cols + month_cols + ['total_fte', 'total_cost']
     
     # Only include columns that exist
     ordered_cols = [col for col in ordered_cols if col in monthly_view.columns]
@@ -187,7 +212,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     
     # Priority Ranking
     priority_ranking = project_summary.sort_values('priority_score', ascending=False)[[
-        'project_id', 'project_name', 'priority_score', 'total_budget', 'allocated_fte', 'allocated_cost', 'budget_utilization_pct'
+        'project_id', 'project_name', 'priority_score', 'total_budget', 'allocated_fte', 'annual_fte_allocated', 'allocated_cost', 'budget_utilization_pct'
     ]].copy()
     priority_ranking['rank'] = range(1, len(priority_ranking) + 1)
     
@@ -196,7 +221,13 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     for _, proj_row in projects_df.iterrows():
         pid = int(proj_row['project_id'])
         proj_allocations = allocs_df[allocs_df['project_id'] == pid]
+        proj_allocations_with_fte = allocs_with_fte[allocs_with_fte['project_id'] == pid]
+        
         allocated_budget = proj_allocations['allocated_cost'].sum()
+        allocated_fte = proj_allocations_with_fte['fte_allocated'].sum()
+        months_active = len(set(proj_allocations['month']))
+        # Average FTE = total FTE-months / number of months allocated
+        annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
         total_budget = float(proj_row.get('alloc_budget', 0))
         
         if total_budget > 0 and allocated_budget < total_budget * 0.95:  # Less than 95% allocated
@@ -217,6 +248,8 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
                     'project_name': str(proj_row.get('project_name', f'Project {pid}')),
                     'total_budget': total_budget,
                     'allocated_budget': allocated_budget,
+                    'allocated_fte': allocated_fte,
+                    'annual_fte_allocated': annual_fte_allocated,
                     'utilization_pct': (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0,
                     'mandatory_skills': ', '.join(mandatory_skills),
                     'resources_without_skills': cannot_allocate_count,
@@ -224,13 +257,13 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
                 })
     
     skill_gaps = pd.DataFrame(skill_gaps_data) if skill_gaps_data else pd.DataFrame(columns=[
-        'project_id', 'project_name', 'total_budget', 'allocated_budget', 'utilization_pct',
+        'project_id', 'project_name', 'total_budget', 'allocated_budget', 'allocated_fte', 'annual_fte_allocated', 'utilization_pct',
         'mandatory_skills', 'resources_without_skills', 'reason'
     ])
     
     # Efficiency Projects
     efficiency_projects = project_summary[project_summary['is_efficiency_project'] == True][[
-        'project_id', 'project_name', 'allocated_cost', 'allocated_fte', 'resources_allocated', 'months_active'
+        'project_id', 'project_name', 'allocated_cost', 'allocated_fte', 'annual_fte_allocated', 'resources_allocated', 'months_active'
     ]].copy()
     
     # Write to Excel
