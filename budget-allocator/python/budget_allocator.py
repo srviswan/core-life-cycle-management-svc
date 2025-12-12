@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Optional
 from utils import (
     months_range, parse_required_skills, calculate_project_priority,
     check_mandatory_skills, calculate_skill_match_score, calculate_effort_alignment,
-    generate_allocation_explanation
+    generate_allocation_explanation, normalize_driver
 )
 from config import (
     PRIORITY_WEIGHTS, PRIORITY_WATERFALL_MULTIPLIER, SOLVER_TYPE,
@@ -56,14 +56,63 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     
     # Calculate project priorities
     project_priorities = {}
+    driver_caps = {}  # driver -> total cap (sum of alloc_budget for projects in that driver)
+    driver_allocated = defaultdict(float)  # Track allocated budget per driver
+    funding_source_groups = defaultdict(list)  # funding_source -> list of project_ids
+    
     for _, proj_row in projects_df.iterrows():
         pid = int(proj_row['project_id'])
         priority = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
         project_priorities[pid] = priority
+        
+        # Track driver caps
+        driver = str(proj_row.get('driver', '')).strip()
+        if driver:
+            alloc_budget = float(proj_row.get('alloc_budget', 0))
+            if driver not in driver_caps:
+                driver_caps[driver] = 0.0
+            driver_caps[driver] += alloc_budget
+        
+        # Track funding_source groups
+        funding_source = str(proj_row.get('funding_source', '')).strip()
+        if funding_source:
+            funding_source_groups[funding_source].append(pid)
+    
+    # Calculate relative priority/rank within each funding_source
+    # Within each funding_source, projects are ranked by priority (highest first)
+    funding_source_project_ranks = {}  # (funding_source, project_id) -> rank within funding_source
+    funding_source_priorities = {}  # funding_source -> priority (max priority of projects in that source)
+    
+    for funding_source, project_ids in funding_source_groups.items():
+        # Sort projects in this funding_source by priority (highest first)
+        project_priorities_in_source = [(pid, project_priorities[pid]) for pid in project_ids]
+        project_priorities_in_source.sort(key=lambda x: x[1], reverse=True)
+        
+        # Assign ranks within funding_source (1 = highest priority)
+        for rank, (pid, priority) in enumerate(project_priorities_in_source, start=1):
+            funding_source_project_ranks[(funding_source, pid)] = rank
+        
+        # Funding source priority = max priority of projects in that source
+        if project_priorities_in_source:
+            funding_source_priorities[funding_source] = project_priorities_in_source[0][1]
+        else:
+            funding_source_priorities[funding_source] = 0.5
     
     # Sort projects by priority (highest first) for waterfall
     projects_df['priority_score'] = projects_df['project_id'].map(project_priorities)
     projects_df = projects_df.sort_values('priority_score', ascending=False).reset_index(drop=True)
+    
+    # Sort drivers by priority (for driver waterfall)
+    # Higher priority drivers (higher normalized score) should be allocated first
+    driver_priorities = {}
+    for driver in driver_caps.keys():
+        driver_priorities[driver] = normalize_driver(driver)
+    
+    # Sort drivers by priority (highest first)
+    sorted_drivers = sorted(driver_priorities.items(), key=lambda x: x[1], reverse=True)
+    
+    # Sort funding sources by priority (highest first)
+    sorted_funding_sources = sorted(funding_source_priorities.items(), key=lambda x: x[1], reverse=True)
     
     # Parse project skills and dates
     project_data = {}
@@ -80,6 +129,12 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         project_months_map[pid] = months
         all_months.update(months)
         
+        driver = str(proj_row.get('driver', '')).strip()
+        driver_priority = driver_priorities.get(driver, 0.5)
+        funding_source = str(proj_row.get('funding_source', '')).strip()
+        funding_source_priority = funding_source_priorities.get(funding_source, 0.5)
+        funding_source_rank = funding_source_project_ranks.get((funding_source, pid), 999)  # Higher rank = lower priority
+        
         project_data[pid] = {
             'required_skills': req_skills,
             'alloc_budget': float(proj_row.get('alloc_budget', 0)),
@@ -87,7 +142,13 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             'months': months,
             'priority': project_priorities[pid],
             'project_name': str(proj_row.get('project_name', f'Project {pid}')),
-            'is_efficiency': float(proj_row.get('alloc_budget', 0)) == 0
+            'is_efficiency': float(proj_row.get('alloc_budget', 0)) == 0,
+            'driver': driver,
+            'driver_priority': driver_priority,
+            'driver_cap': driver_caps.get(driver, 0.0),
+            'funding_source': funding_source,
+            'funding_source_priority': funding_source_priority,
+            'funding_source_rank': funding_source_rank
         }
     
     all_months = sorted(list(all_months))
@@ -164,6 +225,14 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     
     # Calculate max priority for waterfall multiplier
     max_priority = max(project_priorities.values()) if project_priorities else 1.0
+    max_driver_priority = max([p for p in driver_priorities.values()]) if driver_priorities else 1.0
+    max_funding_source_priority = max([p for p in funding_source_priorities.values()]) if funding_source_priorities else 1.0
+    max_funding_source_rank = max([r for r in funding_source_project_ranks.values()]) if funding_source_project_ranks else 1
+    
+    # Driver waterfall multiplier (very high to ensure driver caps are respected)
+    driver_waterfall_multiplier = waterfall_multiplier * 10.0  # Even stronger than project priority
+    # Funding source waterfall multiplier (stronger than project priority, but less than driver)
+    funding_source_waterfall_multiplier = waterfall_multiplier * 5.0
     
     for (resource_id, pid, month), var in variables.items():
         resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
@@ -172,7 +241,22 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         # Base coefficient: cost allocated (maximize allocation)
         base_coeff = 1.0
         
-        # Priority multiplier (waterfall effect)
+        # Driver priority multiplier (driver waterfall effect - allocate within driver first)
+        driver_priority = proj_info.get('driver_priority', 0.5)
+        driver_factor = base_coeff / (driver_waterfall_multiplier ** (max_driver_priority - driver_priority))
+        driver_coeff = priority_weight * driver_factor * 10.0  # Very strong preference
+        
+        # Funding source priority multiplier (funding source waterfall effect)
+        funding_source_priority = proj_info.get('funding_source_priority', 0.5)
+        funding_source_factor = base_coeff / (funding_source_waterfall_multiplier ** (max_funding_source_priority - funding_source_priority))
+        funding_source_coeff = priority_weight * funding_source_factor * 5.0  # Strong preference
+        
+        # Rank within funding source (lower rank = higher priority within funding_source)
+        funding_source_rank = proj_info.get('funding_source_rank', 999)
+        rank_factor = base_coeff / (waterfall_multiplier ** (funding_source_rank - 1))  # Rank 1 gets highest factor
+        rank_coeff = priority_weight * rank_factor
+        
+        # Project priority multiplier (waterfall effect within funding_source and driver)
         priority = proj_info['priority']
         priority_factor = base_coeff / (waterfall_multiplier ** (max_priority - priority))
         priority_coeff = priority_weight * priority_factor
@@ -190,8 +274,8 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             # This is approximated in objective - actual alignment calculated post-solution
             effort_coeff = effort_weight * 0.5  # Neutral preference
         
-        # Total coefficient
-        total_coeff = priority_coeff + skill_coeff + effort_coeff
+        # Total coefficient (driver > funding_source > rank > project priority)
+        total_coeff = driver_coeff + funding_source_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff
         
         objective.SetCoefficient(var, total_coeff)
     

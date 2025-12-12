@@ -16,9 +16,12 @@ The Budget Allocator uses linear programming (OR-Tools) to solve the resource al
 
 - ✅ Cost-based allocation (up to allocated budget)
 - ✅ Yearly with monthly breakdown based on project dates
-- ✅ Hard constraint on mandatory skills
+- ✅ Hard constraint on mandatory skills with AND/OR operators
 - ✅ Priority calculation from Driver + Impact + Rank (weighted sum)
 - ✅ Waterfall allocation (highest priority first)
+- ✅ **Driver-based allocation caps** - Projects within a driver fully allocated before moving to other drivers
+- ✅ **Funding source prioritization** - Priority and rank considered within each funding_source
+- ✅ **Simplified skill system with regex** - Easy-to-use skill matching with AND/OR operators and regex patterns
 - ✅ Effort estimate integration
 - ✅ Efficiency projects (no budget, uses unallocated resources)
 - ✅ Comprehensive output with multiple analysis sheets
@@ -120,13 +123,19 @@ Required columns:
 ## How It Works
 
 1. **Priority Calculation**: Projects are ranked using weighted sum of Driver, Impact, and Rank
-2. **Skill Matching**: Resources must have ALL mandatory skills (hard constraint)
-3. **Optimization**: OR-Tools solver maximizes allocation with preferences for:
+2. **Allocation Hierarchy**: 
+   - **Driver** (highest priority) - Projects within driver fully allocated first
+   - **Funding Source** - Priority and rank considered within each funding_source
+   - **Project Priority** - Overall project priority
+3. **Skill Matching**: Resources must meet skill requirements with AND/OR logic (hard constraint)
+4. **Optimization**: OR-Tools solver maximizes allocation with preferences for:
+   - Driver caps (waterfall within drivers)
+   - Funding source prioritization (waterfall within funding sources)
    - Higher priority projects (waterfall)
    - Better skill matches
    - Effort estimate alignment
-4. **Efficiency Projects**: Projects with no budget use unallocated resources
-5. **Explanation Generation**: Each allocation includes a human-readable explanation
+5. **Efficiency Projects**: Projects with no budget use unallocated resources
+6. **Explanation Generation**: Each allocation includes a human-readable explanation
 
 ## Configuration
 
@@ -143,6 +152,7 @@ Key settings in `config.py`:
 - [User Guide](USER_GUIDE.md) - How to use the allocator
 - [Configuration Guide](CONFIGURATION.md) - Configuration options
 - [Allocation Logic](ALLOCATION_LOGIC.md) - Algorithm details
+- [Driver Caps and Skill Operators](DRIVER_CAPS_AND_SKILL_OPERATORS.md) - Driver caps and AND/OR skill logic
 
 ## Requirements
 

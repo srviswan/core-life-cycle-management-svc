@@ -25,11 +25,17 @@ def create_template(output_path: str):
             'effort_estimate_man_months': 6.0,
             'start_date': '2025-01',
             'end_date': '2025-06',
-            'required_skills': json.dumps({
-                'technical': ['python', 'sql'],
-                'functional': ['pricing', 'risk'],
-                'mandatory': ['python']
-            }),
+            'required_skills': 'python,sql|java',  # Simple format: python AND sql OR java
+            # Alternative JSON format (legacy, still supported):
+            # json.dumps({
+            #     'mandatory_and': ['python'],
+            #     'mandatory_or': ['java', 'c++'],
+            #     'technical_and': ['sql'],
+            #     'technical_or': ['pandas'],
+            #     'functional_and': ['pricing'],
+            #     'functional_or': ['risk', 'trading']
+            # })
+            # Supports regex: 'regex:python.*|java' or 'python*|java'
             'comments': 'Sample project for testing'
         }
     ])
