@@ -51,10 +51,22 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     
     allocs_df = pd.DataFrame(allocations)
     
+    # Calculate FTE for each allocation
+    # Merge with resources to get monthly cost
+    allocs_with_fte = allocs_df.merge(
+        resources_df[['brid', 'cost_per_year']],
+        left_on='resource_id',
+        right_on='brid',
+        how='left'
+    )
+    allocs_with_fte['cost_per_month'] = allocs_with_fte['cost_per_year'] / 12.0
+    allocs_with_fte['fte_allocated'] = allocs_with_fte['allocated_cost'] / allocs_with_fte['cost_per_month']
+    allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].fillna(0.0)
+    
     # Allocations sheet
-    allocations_sheet = allocs_df[[
+    allocations_sheet = allocs_with_fte[[
         'resource_id', 'resource_name', 'project_id', 'project_name',
-        'month', 'allocated_cost', 'priority_score', 'skill_match_score', 'explanation'
+        'month', 'allocated_cost', 'fte_allocated', 'priority_score', 'skill_match_score', 'explanation'
     ]].copy()
     
     # Calculate FTE for allocations (needed for project summary)
