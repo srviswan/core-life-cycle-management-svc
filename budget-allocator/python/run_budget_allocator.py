@@ -6,7 +6,7 @@ from datetime import datetime
 from collections import defaultdict
 from typing import List, Dict, Tuple
 from openpyxl import load_workbook
-from openpyxl.styles import PatternFill
+from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.formatting.rule import ColorScaleRule
 from budget_allocator import budget_allocator
 from utils import (
@@ -208,7 +208,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         monthly_view['resource_name'].astype(str) + 
         ' [' + monthly_view['projects'].astype(str) + ']' +
         ' (FTE: ' + monthly_view['total_fte'].round(2).astype(str) + 
-        ', Cost: $' + monthly_view['total_cost'].round(2).astype(str) + ')'
+        ', Cost: £' + monthly_view['total_cost'].round(2).astype(str) + ')'
     )
     
     # Reorder columns: resource info, resource+allocation, then months (FTE only), then totals at the end
@@ -377,7 +377,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         underutilized_projects.to_excel(writer, sheet_name='Underutilized_Projects', index=False)
     
     # Generate Gantt chart visualization and embed in Excel
-    generate_gantt_chart(allocations_sheet, resources_df, output_path)
+    generate_gantt_chart(allocations_sheet, resources_df, output_path, projects_df)
     
     print(f"\nOutput generated: {output_path}")
     print(f"  - {len(allocations_sheet)} allocations")
@@ -389,13 +389,14 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     print(f"  - Gantt chart embedded in Excel")
 
 
-def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFrame, excel_path: str):
+def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFrame, excel_path: str, projects_df: pd.DataFrame):
     """Generate Excel native Gantt-style chart showing project and resource allocations.
     
     Args:
         allocations_df: DataFrame with allocation data
         resources_df: DataFrame with resource data
         excel_path: Path to Excel file to add the chart to
+        projects_df: DataFrame with project data (for pivot table)
     """
     if allocations_df.empty:
         print("Warning: No allocations to visualize")
@@ -473,8 +474,8 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         title_cell = ws['A1']
         title_cell.value = 'Resource Allocation Heatmap (Grouped by Project)\n(Percentage of resource capacity allocated per month)'
         ws.merge_cells(f'A1:{chr(65 + len(months))}1')
-        title_cell.font = title_cell.font.copy(bold=True, size=12)
-        title_cell.alignment = title_cell.alignment.copy(horizontal='center', vertical='center')
+        title_cell.font = Font(bold=True, size=12)
+        title_cell.alignment = Alignment(horizontal='center', vertical='center')
         ws.row_dimensions[1].height = 40
         
         # Write header row (row 2)
@@ -483,17 +484,16 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
             cell = ws.cell(row=2, column=col_idx, value=month)
             # Format header cells
             header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
-            from openpyxl.styles import Font
             header_font = Font(bold=True, color='FFFFFF')
             cell.fill = header_fill
             cell.font = header_font
-            cell.alignment = cell.alignment.copy(horizontal='center')
+            cell.alignment = Alignment(horizontal='center')
         
         # Format the label column header
         label_header = ws.cell(row=2, column=1)
         label_header.fill = header_fill
         label_header.font = header_font
-        label_header.alignment = label_header.alignment.copy(horizontal='center')
+        label_header.alignment = Alignment(horizontal='center')
         
         ws.row_dimensions[2].height = 25
         
@@ -513,7 +513,7 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
             project_header = ws.cell(row=current_row, column=1, value=project_name)
             project_header.fill = project_header_fill
             project_header.font = project_header_font
-            project_header.alignment = project_header.alignment.copy(horizontal='left', vertical='center')
+            project_header.alignment = Alignment(horizontal='left', vertical='center')
             
             # Merge project header across all columns
             ws.merge_cells(f'A{current_row}:{chr(65 + len(months))}{current_row}')
@@ -609,6 +609,9 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
                     # For resource rows, add thin borders
                     cell.border = thin_border
         
+        # Create pivot table sheet with underlying data
+        create_pivot_table_sheet(wb, allocations_with_fte, projects_df, months)
+        
         # Save the workbook
         wb.save(excel_path)
         wb.close()
@@ -618,6 +621,117 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         print(f"Warning: Could not create Excel chart: {e}")
         import traceback
         traceback.print_exc()
+
+
+def create_pivot_table_sheet(wb, allocations_with_fte: pd.DataFrame, projects_df: pd.DataFrame, months: List[str]):
+    """Create a pivot table sheet with the underlying data used for the heatmap.
+    
+    Args:
+        wb: Workbook object
+        allocations_with_fte: DataFrame with allocations and FTE data
+        projects_df: DataFrame with project data
+        months: List of month strings
+    """
+    # Create pivot table data
+    pivot_data = []
+    
+    for _, alloc_row in allocations_with_fte.iterrows():
+        resource_id = alloc_row['resource_id']
+        resource_name = alloc_row['resource_name']
+        project_id = alloc_row['project_id']
+        project_name = alloc_row['project_name']
+        month = alloc_row['month']
+        allocated_cost = alloc_row['allocated_cost']
+        fte_allocated = alloc_row['fte_allocated']
+        pct_allocation = alloc_row['pct_allocation']
+        
+        # Get project metadata
+        proj_row = projects_df[projects_df['project_id'] == project_id]
+        if not proj_row.empty:
+            funding_source = proj_row.iloc[0].get('funding_source', '')
+            driver = proj_row.iloc[0].get('driver', '')
+        else:
+            funding_source = ''
+            driver = ''
+        
+        pivot_data.append({
+            'Funding Source': funding_source,
+            'Driver': driver,
+            'Project ID': project_id,
+            'Project Name': project_name,
+            'Resource ID': resource_id,
+            'Resource Name': resource_name,
+            'Month': month,
+            'Allocated Cost': allocated_cost,
+            'FTE Allocated': fte_allocated,
+            'Pct Allocation': pct_allocation
+        })
+    
+    pivot_df = pd.DataFrame(pivot_data)
+    
+    # Create pivot table sheet
+    if 'Pivot_Table' in wb.sheetnames:
+        ws_pivot = wb['Pivot_Table']
+        wb.remove(ws_pivot)
+    
+    ws_pivot = wb.create_sheet('Pivot_Table')
+    
+    # Write pivot data
+    for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+        ws_pivot.cell(row=1, column=col_idx, value=col_name)
+        # Format header
+        header_cell = ws_pivot.cell(row=1, column=col_idx)
+        header_cell.fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_cell.font = Font(bold=True, color='FFFFFF')
+        header_cell.alignment = Alignment(horizontal='center')
+    
+    # Write data rows
+    for row_idx, (_, row_data) in enumerate(pivot_df.iterrows(), start=2):
+        for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+            value = row_data[col_name]
+            cell = ws_pivot.cell(row=row_idx, column=col_idx, value=value)
+            
+            # Format percentage column
+            if col_name == 'Pct Allocation':
+                cell.number_format = '0.00"%"'
+            elif col_name in ['Allocated Cost', 'FTE Allocated']:
+                if col_name == 'Allocated Cost':
+                    cell.number_format = '£#,##0.00'
+                else:
+                    cell.number_format = '0.00'
+    
+    # Adjust column widths
+    column_widths = {
+        'Funding Source': 20,
+        'Driver': 20,
+        'Project ID': 12,
+        'Project Name': 30,
+        'Resource ID': 15,
+        'Resource Name': 25,
+        'Month': 12,
+        'Allocated Cost': 15,
+        'FTE Allocated': 12,
+        'Pct Allocation': 15
+    }
+    
+    for col_idx, col_name in enumerate(pivot_df.columns, start=1):
+        if col_name in column_widths:
+            ws_pivot.column_dimensions[chr(64 + col_idx)].width = column_widths[col_name]
+    
+    # Freeze header row
+    ws_pivot.freeze_panes = 'A2'
+    
+    # Add borders
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    for row in range(1, len(pivot_df) + 2):
+        for col in range(1, len(pivot_df.columns) + 1):
+            ws_pivot.cell(row=row, column=col).border = thin_border
 
 
 def main():
