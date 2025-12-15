@@ -95,8 +95,19 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         months_active = len(set(proj_allocations['month']))
         # Average FTE = total FTE-months / number of months allocated
         annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
-        total_budget = float(proj_row.get('alloc_budget', 0))
+        
+        # Get requested_budget (bottom-up ask) - default to alloc_budget if not provided (backward compatible)
+        requested_budget = float(proj_row.get('requested_budget', 0))
+        if pd.isna(requested_budget) or requested_budget == 0:
+            # If not provided, default to alloc_budget (backward compatibility)
+            requested_budget = float(proj_row.get('alloc_budget', 0))
+        
+        total_budget = float(proj_row.get('alloc_budget', 0))  # Maximum budget that can be allocated (constraint)
         budget_utilization = (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0
+        
+        # Calculate budget gap and fulfillment percentage
+        budget_gap = requested_budget - allocated_budget  # Positive gap = unfunded request
+        budget_fulfillment_pct = (allocated_budget / requested_budget * 100) if requested_budget > 0 else 0.0
         
         priority_score = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
         resources_allocated = len(set(proj_allocations['resource_id']))
@@ -107,11 +118,14 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
             'project_id': pid,
             'project_name': str(proj_row.get('project_name', f'Project {pid}')),
             'priority_score': priority_score,
-            'total_budget': total_budget,
+            'requested_budget': requested_budget,  # Bottom-up budget ask
+            'alloc_budget': total_budget,  # Maximum budget that can be allocated (constraint)
+            'allocated_cost': allocated_budget,  # What was actually allocated
+            'budget_gap': budget_gap,  # requested_budget - allocated_cost (positive = unfunded)
+            'budget_fulfillment_pct': budget_fulfillment_pct,  # (allocated_cost / requested_budget) * 100
+            'budget_utilization_pct': budget_utilization,  # (allocated_cost / alloc_budget) * 100
             'allocated_fte': allocated_fte,
             'annual_fte_allocated': annual_fte_allocated,
-            'allocated_cost': allocated_budget,
-            'budget_utilization_pct': budget_utilization,
             'months_active': months_active,
             'resources_allocated': resources_allocated,
             'effort_estimate_man_months': effort_estimate,
@@ -228,7 +242,9 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     
     # Priority Ranking
     priority_ranking = project_summary.sort_values('priority_score', ascending=False)[[
-        'project_id', 'project_name', 'priority_score', 'total_budget', 'allocated_fte', 'annual_fte_allocated', 'allocated_cost', 'budget_utilization_pct'
+        'project_id', 'project_name', 'priority_score', 'requested_budget', 'alloc_budget', 
+        'allocated_fte', 'annual_fte_allocated', 'allocated_cost', 'budget_gap', 
+        'budget_fulfillment_pct', 'budget_utilization_pct'
     ]].copy()
     priority_ranking['rank'] = range(1, len(priority_ranking) + 1)
     

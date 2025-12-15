@@ -21,7 +21,8 @@ def create_template(output_path: str):
             'stakeholder': 'John Doe',
             'impact': 'High',
             'rank': 1,
-            'alloc_budget': 50000,
+            'requested_budget': 50000,  # Bottom-up budget request (what project asks for)
+            'alloc_budget': 50000,  # Maximum budget that can be allocated (constraint)
             'effort_estimate_man_months': 6.0,
             'start_date': '2025-01',
             'end_date': '2025-06',
@@ -345,7 +346,8 @@ def create_sample_input(output_path: str):
             'stakeholder': f'Stakeholder {i}',
             'impact': 'High',
             'rank': i,
-            'alloc_budget': 100000 + i * 10000,
+            'requested_budget': 120000 + i * 12000,  # Bottom-up ask (higher than alloc_budget)
+            'alloc_budget': 100000 + i * 10000,  # Approved budget cap
             'effort_estimate_man_months': 6.0 + i * 0.5,
             'start_date': '2025-01',
             'end_date': '2025-06',
@@ -367,7 +369,8 @@ def create_sample_input(output_path: str):
             'stakeholder': f'Stakeholder {i}',
             'impact': 'Medium',
             'rank': i,
-            'alloc_budget': 50000 + (i-8) * 5000,
+            'requested_budget': 60000 + (i-8) * 6000,  # Bottom-up ask
+            'alloc_budget': 50000 + (i-8) * 5000,  # Approved budget cap
             'effort_estimate_man_months': 4.0 + (i-8) * 0.3,
             'start_date': '2025-02',
             'end_date': '2025-08',
@@ -389,6 +392,7 @@ def create_sample_input(output_path: str):
             'stakeholder': f'Stakeholder {i}',
             'impact': 'Low',
             'rank': i,
+            'requested_budget': 0,  # No budget request - efficiency project
             'alloc_budget': 0,  # No budget - efficiency project
             'effort_estimate_man_months': 3.0 + (i-13) * 0.2,
             'start_date': '2025-03',
