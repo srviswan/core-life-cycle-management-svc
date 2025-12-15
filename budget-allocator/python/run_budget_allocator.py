@@ -176,7 +176,13 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     resource_fte_totals = allocs_with_fte.groupby(['resource_id', 'resource_name'])['fte_allocated'].sum().reset_index()
     resource_fte_totals.columns = ['resource_id', 'resource_name', 'total_fte']
     
-    # Merge FTE view with total cost and total FTE
+    # Get project names for each resource
+    resource_projects = allocs_with_fte.groupby(['resource_id', 'resource_name'])['project_name'].apply(
+        lambda x: ', '.join(sorted(set(x)))
+    ).reset_index()
+    resource_projects.columns = ['resource_id', 'resource_name', 'projects']
+    
+    # Merge FTE view with total cost, total FTE, and projects
     monthly_view = monthly_view_fte.merge(
         resource_totals,
         on=['resource_id', 'resource_name'],
@@ -185,13 +191,19 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         resource_fte_totals,
         on=['resource_id', 'resource_name'],
         how='left'
+    ).merge(
+        resource_projects,
+        on=['resource_id', 'resource_name'],
+        how='left'
     )
     monthly_view['total_cost'] = monthly_view['total_cost'].fillna(0.0)
     monthly_view['total_fte'] = monthly_view['total_fte'].fillna(0.0)
+    monthly_view['projects'] = monthly_view['projects'].fillna('')
     
-    # Add resource+allocation column (resource_name with total FTE and cost)
+    # Add resource+allocation column (resource_name with projects, total FTE and cost)
     monthly_view['resource_allocation'] = (
         monthly_view['resource_name'].astype(str) + 
+        ' [' + monthly_view['projects'].astype(str) + ']' +
         ' (FTE: ' + monthly_view['total_fte'].round(2).astype(str) + 
         ', Cost: $' + monthly_view['total_cost'].round(2).astype(str) + ')'
     )
@@ -201,9 +213,10 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     
     # Get all month columns (sorted)
     month_cols = sorted([col for col in monthly_view.columns 
-                        if col not in base_cols and col not in ['total_cost', 'total_fte']])
+                        if col not in base_cols and col not in ['total_cost', 'total_fte', 'projects']])
     
     # Build ordered column list: resource info, resource+allocation, months, then totals
+    # Exclude 'projects' column as it's redundant (info is in resource_allocation)
     ordered_cols = base_cols + month_cols + ['total_fte', 'total_cost']
     
     # Only include columns that exist

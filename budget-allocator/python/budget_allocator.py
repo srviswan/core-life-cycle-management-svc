@@ -239,26 +239,32 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         proj_info = project_data[pid]
         
         # Base coefficient: cost allocated (maximize allocation)
-        base_coeff = 1.0
+        # Use a very large base coefficient to prioritize full utilization
+        # For budgeted projects, use extremely high base to ensure they get filled first
+        # This ensures the solver maximizes allocation to budgeted projects before efficiency projects
+        if proj_info['is_efficiency']:
+            base_coeff = 1.0  # Lower base for efficiency projects
+        else:
+            base_coeff = 100000.0  # Extremely high base for budgeted projects to ensure full utilization
         
         # Driver priority multiplier (driver waterfall effect - allocate within driver first)
         driver_priority = proj_info.get('driver_priority', 0.5)
-        driver_factor = base_coeff / (driver_waterfall_multiplier ** (max_driver_priority - driver_priority))
+        driver_factor = 1.0 / (driver_waterfall_multiplier ** (max_driver_priority - driver_priority))
         driver_coeff = priority_weight * driver_factor * 10.0  # Very strong preference
         
         # Funding source priority multiplier (funding source waterfall effect)
         funding_source_priority = proj_info.get('funding_source_priority', 0.5)
-        funding_source_factor = base_coeff / (funding_source_waterfall_multiplier ** (max_funding_source_priority - funding_source_priority))
+        funding_source_factor = 1.0 / (funding_source_waterfall_multiplier ** (max_funding_source_priority - funding_source_priority))
         funding_source_coeff = priority_weight * funding_source_factor * 5.0  # Strong preference
         
         # Rank within funding source (lower rank = higher priority within funding_source)
         funding_source_rank = proj_info.get('funding_source_rank', 999)
-        rank_factor = base_coeff / (waterfall_multiplier ** (funding_source_rank - 1))  # Rank 1 gets highest factor
+        rank_factor = 1.0 / (waterfall_multiplier ** (funding_source_rank - 1))  # Rank 1 gets highest factor
         rank_coeff = priority_weight * rank_factor
         
         # Project priority multiplier (waterfall effect within funding_source and driver)
         priority = proj_info['priority']
-        priority_factor = base_coeff / (waterfall_multiplier ** (max_priority - priority))
+        priority_factor = 1.0 / (waterfall_multiplier ** (max_priority - priority))
         priority_coeff = priority_weight * priority_factor
         
         # Skill match preference
@@ -274,8 +280,10 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             # This is approximated in objective - actual alignment calculated post-solution
             effort_coeff = effort_weight * 0.5  # Neutral preference
         
-        # Total coefficient (driver > funding_source > rank > project priority)
-        total_coeff = driver_coeff + funding_source_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff
+        # Total coefficient
+        # Base coefficient (very high for budgeted projects) ensures full utilization is prioritized
+        # Priority multipliers provide fine-grained ordering within budgeted projects
+        total_coeff = base_coeff + driver_coeff + funding_source_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff
         
         objective.SetCoefficient(var, total_coeff)
     

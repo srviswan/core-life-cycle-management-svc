@@ -407,17 +407,21 @@ def calculate_project_priority(project_row: pd.Series, weights: Optional[Dict[st
 
 
 def check_mandatory_skills(resource_row: pd.Series, project_skills: Dict[str, List[str]]) -> Tuple[bool, Dict]:
-    """Check if resource meets skill requirements with AND/OR logic and regex support (hard constraint).
+    """Check if resource meets skill requirements with AND/OR logic and regex support.
+    
+    HARD CONSTRAINTS (must be met to allocate):
+    - 'mandatory_and': ALL mandatory skills required (AND) - supports regex
+    - 'mandatory_or': AT LEAST ONE mandatory skill required (OR) - supports regex
+    
+    SOFT CONSTRAINTS (preferences, affect score but don't block allocation):
+    - 'technical_and': ALL technical skills preferred (AND) - supports regex
+    - 'technical_or': AT LEAST ONE technical skill preferred (OR) - supports regex
+    - 'functional_and': ALL functional skills preferred (AND) - supports regex
+    - 'functional_or': AT LEAST ONE functional skill preferred (OR) - supports regex
     
     Args:
         resource_row: Resource data row with 'technical_skills', 'functional_skills'
-        project_skills: Project skills dict with:
-            - 'mandatory_and': ALL mandatory skills required (AND) - supports regex
-            - 'mandatory_or': AT LEAST ONE mandatory skill required (OR) - supports regex
-            - 'technical_and': ALL technical skills required (AND) - supports regex
-            - 'technical_or': AT LEAST ONE technical skill required (OR) - supports regex
-            - 'functional_and': ALL functional skills required (AND) - supports regex
-            - 'functional_or': AT LEAST ONE functional skill required (OR) - supports regex
+        project_skills: Project skills dict
     
     Returns:
         Tuple of (can_allocate: bool, match_info: dict)
@@ -427,32 +431,22 @@ def check_mandatory_skills(resource_row: pd.Series, project_skills: Dict[str, Li
     resource_func = str(resource_row.get('functional_skills', '') or '')
     resource_all_skills = resource_tech + ',' + resource_func
     
-    # Collect all AND-required skills (all must be present)
-    all_required_skills = []
-    all_required_skills.extend(project_skills.get('mandatory_and', []))
-    all_required_skills.extend(project_skills.get('technical_and', []))
-    all_required_skills.extend(project_skills.get('functional_and', []))
-    
-    # Check AND requirements (all must be present) - with regex support
-    matched_and = []
-    missing_and = []
-    
-    for skill in all_required_skills:
-        if _match_skill(str(skill), resource_all_skills):
-            matched_and.append(skill)
-        else:
-            missing_and.append(skill)
-    
-    # Check OR requirements (at least one must be present) - with regex support
+    # HARD CONSTRAINTS: Only mandatory skills block allocation
+    mandatory_and = project_skills.get('mandatory_and', [])
     mandatory_or = project_skills.get('mandatory_or', [])
-    technical_or = project_skills.get('technical_or', [])
-    functional_or = project_skills.get('functional_or', [])
     
+    # Check mandatory AND (all must be present) - HARD CONSTRAINT
+    matched_mandatory_and = []
+    missing_mandatory_and = []
+    
+    for skill in mandatory_and:
+        if _match_skill(str(skill), resource_all_skills):
+            matched_mandatory_and.append(skill)
+        else:
+            missing_mandatory_and.append(skill)
+    
+    # Check mandatory OR (at least one must be present) - HARD CONSTRAINT
     mandatory_or_met = False
-    technical_or_met = False
-    functional_or_met = False
-    
-    # Check mandatory OR
     if not mandatory_or:
         mandatory_or_met = True  # No OR requirement = satisfied
     else:
@@ -461,7 +455,23 @@ def check_mandatory_skills(resource_row: pd.Series, project_skills: Dict[str, Li
                 mandatory_or_met = True
                 break
     
-    # Check technical OR
+    # SOFT CONSTRAINTS: Technical and functional skills (for scoring, not blocking)
+    technical_and = project_skills.get('technical_and', [])
+    technical_or = project_skills.get('technical_or', [])
+    functional_and = project_skills.get('functional_and', [])
+    functional_or = project_skills.get('functional_or', [])
+    
+    # Check technical AND (for scoring)
+    matched_technical_and = []
+    missing_technical_and = []
+    for skill in technical_and:
+        if _match_skill(str(skill), resource_tech):
+            matched_technical_and.append(skill)
+        else:
+            missing_technical_and.append(skill)
+    
+    # Check technical OR (for scoring)
+    technical_or_met = False
     if not technical_or:
         technical_or_met = True  # No OR requirement = satisfied
     else:
@@ -470,7 +480,17 @@ def check_mandatory_skills(resource_row: pd.Series, project_skills: Dict[str, Li
                 technical_or_met = True
                 break
     
-    # Check functional OR
+    # Check functional AND (for scoring)
+    matched_functional_and = []
+    missing_functional_and = []
+    for skill in functional_and:
+        if _match_skill(str(skill), resource_func):
+            matched_functional_and.append(skill)
+        else:
+            missing_functional_and.append(skill)
+    
+    # Check functional OR (for scoring)
+    functional_or_met = False
     if not functional_or:
         functional_or_met = True  # No OR requirement = satisfied
     else:
@@ -479,24 +499,39 @@ def check_mandatory_skills(resource_row: pd.Series, project_skills: Dict[str, Li
                 functional_or_met = True
                 break
     
-    # Can allocate if: all AND requirements met AND all OR requirements met
-    can_allocate = (len(missing_and) == 0) and mandatory_or_met and technical_or_met and functional_or_met
+    # Can allocate if: all MANDATORY AND requirements met AND all MANDATORY OR requirements met
+    # Technical and functional skills are SOFT constraints (don't block allocation)
+    can_allocate = (len(missing_mandatory_and) == 0) and mandatory_or_met
+    
+    # Collect all matched/missing for reporting
+    all_matched = matched_mandatory_and + matched_technical_and + matched_functional_and
+    all_missing = missing_mandatory_and + missing_technical_and + missing_functional_and
     
     match_details_parts = []
-    if all_required_skills:
-        match_details_parts.append(f"AND: {len(matched_and)}/{len(all_required_skills)}")
+    if mandatory_and:
+        match_details_parts.append(f"Mandatory AND: {len(matched_mandatory_and)}/{len(mandatory_and)}")
     if mandatory_or:
         match_details_parts.append(f"Mandatory OR: {'met' if mandatory_or_met else 'not met'}")
+    if technical_and:
+        match_details_parts.append(f"Technical AND: {len(matched_technical_and)}/{len(technical_and)}")
     if technical_or:
         match_details_parts.append(f"Technical OR: {'met' if technical_or_met else 'not met'}")
+    if functional_and:
+        match_details_parts.append(f"Functional AND: {len(matched_functional_and)}/{len(functional_and)}")
     if functional_or:
         match_details_parts.append(f"Functional OR: {'met' if functional_or_met else 'not met'}")
     
     match_details = ', '.join(match_details_parts) if match_details_parts else 'No skill requirements'
     
     return can_allocate, {
-        'matched_skills': matched_and,
-        'missing_skills': missing_and,
+        'matched_skills': all_matched,
+        'missing_skills': all_missing,
+        'mandatory_and_matched': matched_mandatory_and,
+        'mandatory_and_missing': missing_mandatory_and,
+        'technical_and_matched': matched_technical_and,
+        'technical_and_missing': missing_technical_and,
+        'functional_and_matched': matched_functional_and,
+        'functional_and_missing': missing_functional_and,
         'mandatory_or_met': mandatory_or_met,
         'technical_or_met': technical_or_met,
         'functional_or_met': functional_or_met,
