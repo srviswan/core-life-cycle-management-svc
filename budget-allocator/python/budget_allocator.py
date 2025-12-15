@@ -12,7 +12,8 @@ from utils import (
 )
 from config import (
     PRIORITY_WEIGHTS, PRIORITY_WATERFALL_MULTIPLIER, SOLVER_TYPE,
-    EFFORT_ESTIMATE_WEIGHT, SKILL_MATCH_WEIGHT, PRIORITY_WEIGHT
+    EFFORT_ESTIMATE_WEIGHT, SKILL_MATCH_WEIGHT, PRIORITY_WEIGHT,
+    REGION_DIVERSITY_WEIGHT
 )
 
 
@@ -135,6 +136,12 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         funding_source_priority = funding_source_priorities.get(funding_source, 0.5)
         funding_source_rank = funding_source_project_ranks.get((funding_source, pid), 999)  # Higher rank = lower priority
         
+        # Max resource allocation percentage (defaults to 1.0 = 100% if not specified)
+        max_resource_allocation_pct = float(proj_row.get('max_resource_allocation_pct', 1.0))
+        if pd.isna(max_resource_allocation_pct) or max_resource_allocation_pct <= 0:
+            max_resource_allocation_pct = 1.0  # Default to 100% (no limit)
+        max_resource_allocation_pct = min(max_resource_allocation_pct, 1.0)  # Cap at 100%
+        
         project_data[pid] = {
             'required_skills': req_skills,
             'alloc_budget': float(proj_row.get('alloc_budget', 0)),
@@ -148,7 +155,8 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             'driver_cap': driver_caps.get(driver, 0.0),
             'funding_source': funding_source,
             'funding_source_priority': funding_source_priority,
-            'funding_source_rank': funding_source_rank
+            'funding_source_rank': funding_source_rank,
+            'max_resource_allocation_pct': max_resource_allocation_pct
         }
     
     all_months = sorted(list(all_months))
@@ -166,6 +174,17 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     variables = {}
     resource_ids = resources_df['brid'].tolist()
     skill_scores = {}  # Cache skill match scores
+    resource_locations = {}  # Cache resource locations for region diversity
+    
+    # Build resource location map
+    for _, resource_row in resources_df.iterrows():
+        resource_id = str(resource_row['brid'])
+        location = str(resource_row.get('location', '')).strip()
+        resource_locations[resource_id] = location
+    
+    # Get all unique locations
+    all_locations = set(resource_locations.values())
+    max_regions = len(all_locations)  # Maximum possible regions for diversity calculation
     
     # Create variables only for valid resource-project-month combinations
     for _, resource_row in resources_df.iterrows():
@@ -219,6 +238,26 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Note: Efficiency projects (alloc_budget = 0) have no budget constraint
     # They can use unallocated resources up to resource capacity
     
+    # Constraint 3: Max resource allocation percentage per project
+    # For projects with max_resource_allocation_pct < 1.0, limit how much of a resource
+    # can be allocated to that project in any given month
+    for pid, proj_info in project_data.items():
+        max_pct = proj_info.get('max_resource_allocation_pct', 1.0)
+        if max_pct < 1.0:  # Only add constraint if less than 100%
+            for resource_id in resource_ids:
+                resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
+                resource_monthly_cost = float(resource_row['cost_per_month'])
+                max_allocation_for_project = max_pct * resource_monthly_cost
+                
+                # Add constraint for each month this project is active
+                for month in proj_info['months']:
+                    constraint = solver.Constraint(0.0, max_allocation_for_project, 
+                                                  f'max_resource_pct_p{pid}_r{resource_id}_m{month}')
+                    # Find variable for this resource-project-month combination
+                    var_key = (resource_id, pid, month)
+                    if var_key in variables:
+                        constraint.SetCoefficient(variables[var_key], 1.0)
+    
     # Objective function: Maximize allocation with preferences
     objective = solver.Objective()
     objective.SetMaximization()
@@ -234,9 +273,22 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Funding source waterfall multiplier (stronger than project priority, but less than driver)
     funding_source_waterfall_multiplier = waterfall_multiplier * 5.0
     
+    # Pre-calculate region diversity for each project
+    # Track which regions have variables for each project (for diversity bonus)
+    # Projects with allocations from more diverse regions get higher bonus
+    project_region_variable_counts = defaultdict(lambda: defaultdict(int))  # project_id -> {region: count}
+    
+    # First pass: count variables per region per project
+    for (resource_id, pid, month), var in variables.items():
+        resource_location = resource_locations.get(resource_id, '')
+        if resource_location:
+            project_region_variable_counts[pid][resource_location] += 1
+    
+    # Calculate region diversity bonus for each variable
     for (resource_id, pid, month), var in variables.items():
         resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
         proj_info = project_data[pid]
+        resource_location = resource_locations.get(resource_id, '')
         
         # Base coefficient: cost allocated (maximize allocation)
         # Use a very large base coefficient to prioritize full utilization
@@ -280,10 +332,32 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             # This is approximated in objective - actual alignment calculated post-solution
             effort_coeff = effort_weight * 0.5  # Neutral preference
         
+        # Region diversity bonus (soft constraint)
+        # Strategy: Give higher bonus to allocations from regions that are less common for this project
+        # This encourages the solver to spread allocations across regions
+        region_diversity_bonus = 0.0
+        if REGION_DIVERSITY_WEIGHT > 0 and resource_location and max_regions > 0:
+            # Count how many variables this project has from each region
+            region_counts = project_region_variable_counts[pid]
+            total_vars_for_project = sum(region_counts.values())
+            
+            if total_vars_for_project > 0:
+                # Calculate how common this region is for this project
+                region_frequency = region_counts.get(resource_location, 0) / total_vars_for_project
+                # Inverse frequency: less common regions get higher bonus
+                # Bonus = REGION_DIVERSITY_WEIGHT * (1 - region_frequency) * normalization_factor
+                # Normalize by max_regions to keep bonus small relative to base_coeff
+                inverse_frequency = 1.0 - region_frequency
+                region_diversity_bonus = REGION_DIVERSITY_WEIGHT * inverse_frequency * (1.0 / max_regions)
+            else:
+                # First allocation from this region - give small bonus
+                region_diversity_bonus = REGION_DIVERSITY_WEIGHT * (1.0 / max_regions)
+        
         # Total coefficient
         # Base coefficient (very high for budgeted projects) ensures full utilization is prioritized
         # Priority multipliers provide fine-grained ordering within budgeted projects
-        total_coeff = base_coeff + driver_coeff + funding_source_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff
+        # Region diversity bonus encourages cross-region allocation (higher for less common regions)
+        total_coeff = base_coeff + driver_coeff + funding_source_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff + region_diversity_bonus
         
         objective.SetCoefficient(var, total_coeff)
     

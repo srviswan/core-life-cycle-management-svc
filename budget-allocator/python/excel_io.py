@@ -36,6 +36,7 @@ def create_template(output_path: str):
             #     'functional_or': ['risk', 'trading']
             # })
             # Supports regex: 'regex:python.*|java' or 'python*|java'
+            'max_resource_allocation_pct': 1.0,  # Max % of resource capacity per month (0.0-1.0, default 1.0 = 100%)
             'comments': 'Sample project for testing'
         }
     ])
@@ -397,6 +398,7 @@ def create_sample_input(output_path: str):
                 'functional': ['analysis'],
                 'mandatory': []
             }),
+            'max_resource_allocation_pct': 1.0,  # No limit for efficiency projects
             'comments': f'Efficiency project {i-12} - uses unallocated resources'
         })
     
