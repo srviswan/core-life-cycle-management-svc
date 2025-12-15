@@ -27,3 +27,7 @@ SKILL_MATCH_WEIGHT = 0.2
 
 # Priority weight in objective function
 PRIORITY_WEIGHT = 1.0
+
+# Region diversity weight in objective function
+# Higher values encourage cross-region allocation (diversity bonus)
+REGION_DIVERSITY_WEIGHT = 0.1
