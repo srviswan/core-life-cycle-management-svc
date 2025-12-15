@@ -6,9 +6,8 @@ from datetime import datetime
 from collections import defaultdict
 from typing import List, Dict, Tuple
 from openpyxl import load_workbook
-from openpyxl.chart import BarChart, Reference
-from openpyxl.chart.label import DataLabelList
-from openpyxl.chart.text import RichText
+from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import ColorScaleRule
 from budget_allocator import budget_allocator
 from utils import (
     calculate_project_priority, generate_allocation_explanation,
@@ -427,30 +426,37 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
     projects = sorted(allocations_with_fte['project_name'].unique())
     months = sorted(allocations_with_fte['month'].unique())
     
-    # Create pivot table: rows = project+resource, columns = months, values = percentage allocation
-    chart_data = []
-    row_labels = []
+    # Create grouped data structure: one group per project, then resources within each project
+    grouped_data = []
     
     for project_name in projects:
         proj_allocations = allocations_with_fte[allocations_with_fte['project_name'] == project_name]
         resources_in_project = sorted(proj_allocations['resource_name'].unique())
         
+        project_resources = []
         for resource_name in resources_in_project:
             resource_allocations = proj_allocations[proj_allocations['resource_name'] == resource_name]
-            row_label = f"{project_name} - {resource_name}"
-            row_labels.append(row_label)
+            row_label = resource_name  # Just resource name, project is in group header
             
             row_data = []
             for month in months:
                 month_allocations = resource_allocations[resource_allocations['month'] == month]
                 if not month_allocations.empty:
-                    # Sum percentage allocations for this resource-month (can be multiple if same resource on multiple projects)
+                    # Sum percentage allocations for this resource-month
                     pct = month_allocations['pct_allocation'].sum()
                     row_data.append(min(pct, 100.0))  # Cap at 100%
                 else:
                     row_data.append(0.0)
             
-            chart_data.append(row_data)
+            project_resources.append({
+                'resource_name': resource_name,
+                'data': row_data
+            })
+        
+        grouped_data.append({
+            'project_name': project_name,
+            'resources': project_resources
+        })
     
     # Load the Excel workbook
     try:
@@ -463,51 +469,145 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         
         ws = wb.create_sheet('Gantt_Chart')
         
-        # Write header row
-        ws['A1'] = 'Project - Resource'
+        # Add title row
+        title_cell = ws['A1']
+        title_cell.value = 'Resource Allocation Heatmap (Grouped by Project)\n(Percentage of resource capacity allocated per month)'
+        ws.merge_cells(f'A1:{chr(65 + len(months))}1')
+        title_cell.font = title_cell.font.copy(bold=True, size=12)
+        title_cell.alignment = title_cell.alignment.copy(horizontal='center', vertical='center')
+        ws.row_dimensions[1].height = 40
+        
+        # Write header row (row 2)
+        ws.cell(row=2, column=1, value='Project / Resource')
         for col_idx, month in enumerate(months, start=2):
-            ws.cell(row=1, column=col_idx, value=month)
+            cell = ws.cell(row=2, column=col_idx, value=month)
+            # Format header cells
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            from openpyxl.styles import Font
+            header_font = Font(bold=True, color='FFFFFF')
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = cell.alignment.copy(horizontal='center')
         
-        # Write data rows
-        for row_idx, (row_label, row_data) in enumerate(zip(row_labels, chart_data), start=2):
-            ws.cell(row=row_idx, column=1, value=row_label)
-            for col_idx, value in enumerate(row_data, start=2):
-                ws.cell(row=row_idx, column=col_idx, value=value)
+        # Format the label column header
+        label_header = ws.cell(row=2, column=1)
+        label_header.fill = header_fill
+        label_header.font = header_font
+        label_header.alignment = label_header.alignment.copy(horizontal='center')
         
-        # Create a horizontal bar chart (better for Gantt-style visualization)
-        chart = BarChart()
-        chart.type = "bar"  # Horizontal bar chart
-        chart.style = 10
-        chart.title = "Resource Allocation Gantt Chart\n(Percentage of resource capacity allocated per month)"
-        chart.y_axis.title = "Project - Resource"
-        chart.x_axis.title = "Allocation Percentage (%)"
+        ws.row_dimensions[2].height = 25
         
-        # Set data range (skip header row and label column)
-        data = Reference(ws, min_col=2, min_row=1, max_col=len(months)+1, max_row=len(row_labels)+1)
-        cats = Reference(ws, min_col=1, min_row=2, max_row=len(row_labels)+1)
+        # Write grouped data: one group per project
+        current_row = 3
+        data_start_row = 3
+        data_end_row = 2
         
-        chart.add_data(data, titles_from_data=True)
-        chart.set_categories(cats)
+        project_header_fill = PatternFill(start_color='8FAADC', end_color='8FAADC', fill_type='solid')
+        project_header_font = Font(bold=True, size=11, color='000000')
         
-        # Reverse the order so first project appears at top
-        chart.y_axis.scaling.orientation = "maxMin"
+        for project_group in grouped_data:
+            project_name = project_group['project_name']
+            resources = project_group['resources']
+            
+            # Add project header row
+            project_header = ws.cell(row=current_row, column=1, value=project_name)
+            project_header.fill = project_header_fill
+            project_header.font = project_header_font
+            project_header.alignment = project_header.alignment.copy(horizontal='left', vertical='center')
+            
+            # Merge project header across all columns
+            ws.merge_cells(f'A{current_row}:{chr(65 + len(months))}{current_row}')
+            ws.row_dimensions[current_row].height = 20
+            current_row += 1
+            
+            # Add resource rows for this project
+            for resource in resources:
+                resource_name = resource['resource_name']
+                row_data = resource['data']
+                
+                ws.cell(row=current_row, column=1, value=resource_name)
+                for col_idx, value in enumerate(row_data, start=2):
+                    cell = ws.cell(row=current_row, column=col_idx, value=value)
+                    # Format as percentage with 0 decimal places
+                    cell.number_format = '0"%"'
+                
+                current_row += 1
+            
+            # Add a small gap row between projects (optional, for better visual separation)
+            # Don't add gap after last project
+            if project_group != grouped_data[-1]:
+                current_row += 1
+            data_end_row = current_row - 1
         
-        # Set x-axis to show percentage (0-100%)
-        chart.x_axis.scaling.min = 0
-        chart.x_axis.scaling.max = 100
+        # Apply conditional formatting (heatmap) to data cells (exclude project header rows)
+        # We need to apply formatting only to resource rows, not project header rows
+        # Color scale: Green (0%) -> Yellow (50%) -> Red (100%)
+        data_range = f"B{data_start_row}:{chr(65 + len(months))}{data_end_row}"
         
-        # Add data labels (percentage values) - show only for significant allocations
-        chart.dataLabels = DataLabelList()
-        chart.dataLabels.showVal = False  # Hide by default to reduce clutter
-        chart.dataLabels.showPercent = False
+        # Create color scale rule: Green (low) -> Yellow (mid) -> Red (high)
+        color_scale = ColorScaleRule(
+            start_type='num',
+            start_value=0,
+            start_color='90EE90',  # Light green
+            mid_type='num',
+            mid_value=50,
+            mid_color='FFFF00',  # Yellow
+            end_type='num',
+            end_value=100,
+            end_color='FF6B6B'  # Light red
+        )
         
-        # Position chart to the right of data
-        ws.add_chart(chart, f"{chr(65 + len(months) + 2)}2")
+        ws.conditional_formatting.add(data_range, color_scale)
+        
+        # Add color scale legend
+        legend_row = data_end_row + 3
+        ws.cell(row=legend_row, column=1, value='Color Scale:')
+        ws.cell(row=legend_row, column=2, value='0%').fill = PatternFill(start_color='90EE90', end_color='90EE90', fill_type='solid')
+        ws.cell(row=legend_row, column=3, value='50%').fill = PatternFill(start_color='FFFF00', end_color='FFFF00', fill_type='solid')
+        ws.cell(row=legend_row, column=4, value='100%').fill = PatternFill(start_color='FF6B6B', end_color='FF6B6B', fill_type='solid')
+        ws.cell(row=legend_row, column=5, value='(Green = Low, Yellow = Medium, Red = High)')
         
         # Adjust column widths
-        ws.column_dimensions['A'].width = 40
+        ws.column_dimensions['A'].width = 35
         for col_idx in range(2, len(months) + 2):
-            ws.column_dimensions[chr(64 + col_idx)].width = 12
+            col_letter = chr(64 + col_idx)
+            ws.column_dimensions[col_letter].width = 12
+        
+        # Freeze panes for easier navigation (freeze title and header rows)
+        ws.freeze_panes = 'B3'
+        
+        # Add borders to cells for better readability
+        from openpyxl.styles import Border, Side
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Add borders to header row
+        for col in range(1, len(months) + 2):
+            ws.cell(row=2, column=col).border = thin_border
+        
+        # Add borders to all data rows (including project headers and resource rows)
+        for row in range(3, data_end_row + 1):
+            for col in range(1, len(months) + 2):
+                cell = ws.cell(row=row, column=col)
+                # Check if this is a project header row (has project header fill)
+                is_project_header = (cell.fill.start_color.rgb == project_header_fill.start_color.rgb if cell.fill.start_color else False)
+                
+                if is_project_header:
+                    # For project headers, add a thicker bottom border
+                    thick_bottom = Border(
+                        left=Side(style='thin'),
+                        right=Side(style='thin'),
+                        top=Side(style='thin'),
+                        bottom=Side(style='medium')
+                    )
+                    cell.border = thick_bottom
+                else:
+                    # For resource rows, add thin borders
+                    cell.border = thin_border
         
         # Save the workbook
         wb.save(excel_path)
