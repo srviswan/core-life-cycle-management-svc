@@ -238,20 +238,27 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Note: Efficiency projects (alloc_budget = 0) have no budget constraint
     # They can use unallocated resources up to resource capacity
     
-    # Constraint 3: Max resource allocation percentage per project
+    # Constraint 3: Max resource allocation percentage per project (PER MONTH)
     # For projects with max_resource_allocation_pct < 1.0, limit how much of a resource
-    # can be allocated to that project in any given month
+    # can be allocated to that project in EACH MONTH (not annual total).
+    # This constraint is applied separately for each month, ensuring monthly limits.
+    # Example: If max_pct=0.30 and resource costs $10k/month:
+    #   - Month 1: allocation <= $3,000 (30% of monthly cost)
+    #   - Month 2: allocation <= $3,000 (30% of monthly cost)
+    #   - Month 3: allocation <= $3,000 (30% of monthly cost)
+    #   Each month is independently constrained.
     for pid, proj_info in project_data.items():
         max_pct = proj_info.get('max_resource_allocation_pct', 1.0)
         if max_pct < 1.0:  # Only add constraint if less than 100%
             for resource_id in resource_ids:
                 resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
                 resource_monthly_cost = float(resource_row['cost_per_month'])
-                max_allocation_for_project = max_pct * resource_monthly_cost
+                max_allocation_per_month = max_pct * resource_monthly_cost
                 
-                # Add constraint for each month this project is active
+                # Add a SEPARATE constraint for EACH month this project is active
+                # Each month gets its own independent limit
                 for month in proj_info['months']:
-                    constraint = solver.Constraint(0.0, max_allocation_for_project, 
+                    constraint = solver.Constraint(0.0, max_allocation_per_month, 
                                                   f'max_resource_pct_p{pid}_r{resource_id}_m{month}')
                     # Find variable for this resource-project-month combination
                     var_key = (resource_id, pid, month)
