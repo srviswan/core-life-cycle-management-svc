@@ -84,9 +84,17 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].fillna(0.0)
     
     # Project Summary
+    # Filter out projects without effort_estimate_man_months (same logic as in allocator)
     project_summary_data = []
     for _, proj_row in projects_df.iterrows():
         pid = int(proj_row['project_id'])
+        
+        # Check if effort_estimate_man_months is provided (required for allocation)
+        effort_estimate = proj_row.get('effort_estimate_man_months')
+        if pd.isna(effort_estimate) or effort_estimate == 0 or effort_estimate == '':
+            # Skip projects without effort_estimate_man_months in summary
+            continue
+        
         proj_allocations = allocs_df[allocs_df['project_id'] == pid]
         proj_allocations_with_fte = allocs_with_fte[allocs_with_fte['project_id'] == pid]
         
@@ -112,7 +120,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         priority_score = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
         resources_allocated = len(set(proj_allocations['resource_id']))
         
-        effort_estimate = float(proj_row.get('effort_estimate_man_months', 0)) if pd.notna(proj_row.get('effort_estimate_man_months')) else None
+        effort_estimate = float(effort_estimate) if pd.notna(effort_estimate) else None
         
         project_summary_data.append({
             'project_id': pid,

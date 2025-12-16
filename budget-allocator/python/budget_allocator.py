@@ -133,12 +133,27 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         driver_priorities[(funding_source, driver)] = normalize_driver(driver)
     
     # Parse project skills and dates
+    # FILTER: Only include projects with effort_estimate_man_months entered
     project_data = {}
     project_months_map = {}
     all_months = set()
+    projects_without_effort = []  # Track projects excluded due to missing effort estimate
     
     for _, proj_row in projects_df.iterrows():
         pid = int(proj_row['project_id'])
+        
+        # Check if effort_estimate_man_months is provided (required)
+        effort_estimate = proj_row.get('effort_estimate_man_months')
+        if pd.isna(effort_estimate) or effort_estimate == 0 or effort_estimate == '':
+            # Skip projects without effort_estimate_man_months
+            projects_without_effort.append(pid)
+            continue
+        
+        effort_estimate = float(effort_estimate)
+        if effort_estimate <= 0:
+            projects_without_effort.append(pid)
+            continue
+        
         req_skills = parse_required_skills(proj_row.get('required_skills'))
         start_date = str(proj_row.get('start_date', '2025-01'))
         end_date = str(proj_row.get('end_date', '2025-12'))
@@ -171,7 +186,7 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         project_data[pid] = {
             'required_skills': req_skills,
             'alloc_budget': float(proj_row.get('alloc_budget', 0)),
-            'effort_estimate': float(proj_row.get('effort_estimate_man_months', 0)) if pd.notna(proj_row.get('effort_estimate_man_months')) else None,
+            'effort_estimate': effort_estimate,  # Required - already validated above
             'months': months,
             'priority': project_priorities[pid],
             'project_name': str(proj_row.get('project_name', f'Project {pid}')),
@@ -184,6 +199,9 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             'driver_rank': driver_rank,  # Rank within (funding_source + driver)
             'max_resource_allocation_pct': max_resource_allocation_pct
         }
+    
+    if projects_without_effort:
+        print(f"Warning: {len(projects_without_effort)} projects excluded (no effort_estimate_man_months): {projects_without_effort}")
     
     all_months = sorted(list(all_months))
     
@@ -249,6 +267,10 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                     constraint.SetCoefficient(var, 1.0)
     
     # Constraint 2: Budget constraint - sum of allocations per project-month ≤ monthly budget
+    # This is ONE of TWO main constraints that limit project allocation:
+    #   1. Max alloc_budget (budget constraint) - applied per month
+    #   2. Max effort_estimate_man_months (effort constraint) - applied as total FTE-months
+    # Both constraints are applied simultaneously; whichever is more restrictive will limit allocation
     # Only for projects with budget > 0
     for pid, proj_info in project_data.items():
         if proj_info['alloc_budget'] > 0:  # Only budgeted projects
@@ -262,7 +284,7 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                         constraint.SetCoefficient(var, 1.0)
     
     # Note: Efficiency projects (alloc_budget = 0) have no budget constraint
-    # They can use unallocated resources up to resource capacity
+    # They can use unallocated resources up to resource capacity and effort estimate limit
     
     # Constraint 4: Funding Source budget constraint - prevent budget leakage between funding sources
     # Sum of allocations per funding_source ≤ total budget for that funding_source
@@ -295,12 +317,37 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                 # Add a SEPARATE constraint for EACH month this project is active
                 # Each month gets its own independent limit
                 for month in proj_info['months']:
-                    constraint = solver.Constraint(0.0, max_allocation_per_month, 
+                    constraint = solver.Constraint(0.0, max_allocation_per_month,
                                                   f'max_resource_pct_p{pid}_r{resource_id}_m{month}')
                     # Find variable for this resource-project-month combination
                     var_key = (resource_id, pid, month)
                     if var_key in variables:
                         constraint.SetCoefficient(variables[var_key], 1.0)
+    
+    # Constraint 5: Effort estimate constraint - total FTE-months allocated ≤ effort_estimate_man_months
+    # This is ONE of TWO main constraints that limit project allocation:
+    #   1. Max alloc_budget (budget constraint) - applied per month (Constraint 2)
+    #   2. Max effort_estimate_man_months (effort constraint) - applied as total FTE-months (this constraint)
+    # Both constraints are applied simultaneously; whichever is more restrictive will limit allocation
+    # For each project, sum of (allocated_cost / resource_monthly_cost) across all resources and months
+    # must be ≤ effort_estimate_man_months
+    # This ensures we don't overallocate beyond the effort estimate
+    for pid, proj_info in project_data.items():
+        effort_estimate = proj_info.get('effort_estimate')
+        if effort_estimate and effort_estimate > 0:
+            # Create constraint: sum of FTE-months ≤ effort_estimate_man_months
+            # FTE-months = allocated_cost / resource_monthly_cost for each resource-month
+            constraint = solver.Constraint(0.0, effort_estimate, f'effort_estimate_p{pid}')
+            
+            # Add coefficient for each variable: allocated_cost / resource_monthly_cost = FTE
+            for (resource_id, p, month), var in variables.items():
+                if p == pid:  # Only for this project
+                    resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
+                    resource_monthly_cost = float(resource_row['cost_per_month'])
+                    if resource_monthly_cost > 0:
+                        # Coefficient = 1 / resource_monthly_cost (to convert cost to FTE)
+                        # When multiplied by allocated_cost variable, gives FTE
+                        constraint.SetCoefficient(var, 1.0 / resource_monthly_cost)
     
     # Objective function: Maximize allocation with preferences
     objective = solver.Objective()
