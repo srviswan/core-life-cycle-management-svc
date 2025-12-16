@@ -122,9 +122,15 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         
         effort_estimate = float(effort_estimate) if pd.notna(effort_estimate) else None
         
+        # Get funding_source and driver from project row
+        funding_source = str(proj_row.get('funding_source', '')).strip()
+        driver = str(proj_row.get('driver', '')).strip()
+        
         project_summary_data.append({
             'project_id': pid,
             'project_name': str(proj_row.get('project_name', f'Project {pid}')),
+            'funding_source': funding_source,
+            'driver': driver,
             'priority_score': priority_score,
             'requested_budget': requested_budget,  # Bottom-up budget ask
             'alloc_budget': total_budget,  # Maximum budget that can be allocated (constraint)
@@ -438,6 +444,16 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
     allocations_with_fte['fte_allocated'] = allocations_with_fte['allocated_cost'] / allocations_with_fte['cost_per_month']
     allocations_with_fte['fte_allocated'] = allocations_with_fte['fte_allocated'].fillna(0.0)
     
+    # Merge with projects to get funding_source and driver
+    allocations_with_fte = allocations_with_fte.merge(
+        projects_df[['project_id', 'funding_source', 'driver']],
+        left_on='project_id',
+        right_on='project_id',
+        how='left'
+    )
+    allocations_with_fte['funding_source'] = allocations_with_fte['funding_source'].fillna('')
+    allocations_with_fte['driver'] = allocations_with_fte['driver'].fillna('')
+    
     # Calculate percentage allocation for each resource-month
     allocations_with_fte['pct_allocation'] = 0.0
     for idx, row in allocations_with_fte.iterrows():
@@ -448,41 +464,56 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
             if resource_monthly_cost > 0:
                 allocations_with_fte.at[idx, 'pct_allocation'] = (row['allocated_cost'] / resource_monthly_cost * 100)
     
-    # Get unique projects and months
-    projects = sorted(allocations_with_fte['project_name'].unique())
+    # Get unique months
     months = sorted(allocations_with_fte['month'].unique())
     
-    # Create grouped data structure: one group per project, then resources within each project
+    # Create grouped data structure: funding_source -> driver -> project -> resources
     grouped_data = []
     
-    for project_name in projects:
-        proj_allocations = allocations_with_fte[allocations_with_fte['project_name'] == project_name]
-        resources_in_project = sorted(proj_allocations['resource_name'].unique())
+    # Group by funding_source first
+    funding_sources = sorted(allocations_with_fte['funding_source'].unique())
+    
+    for funding_source in funding_sources:
+        fs_allocations = allocations_with_fte[allocations_with_fte['funding_source'] == funding_source]
         
-        project_resources = []
-        for resource_name in resources_in_project:
-            resource_allocations = proj_allocations[proj_allocations['resource_name'] == resource_name]
-            row_label = resource_name  # Just resource name, project is in group header
-            
-            row_data = []
-            for month in months:
-                month_allocations = resource_allocations[resource_allocations['month'] == month]
-                if not month_allocations.empty:
-                    # Sum percentage allocations for this resource-month
-                    pct = month_allocations['pct_allocation'].sum()
-                    row_data.append(min(pct, 100.0))  # Cap at 100%
-                else:
-                    row_data.append(0.0)
-            
-            project_resources.append({
-                'resource_name': resource_name,
-                'data': row_data
-            })
+        # Group by driver within funding_source
+        drivers = sorted(fs_allocations['driver'].unique())
         
-        grouped_data.append({
-            'project_name': project_name,
-            'resources': project_resources
-        })
+        for driver in drivers:
+            driver_allocations = fs_allocations[fs_allocations['driver'] == driver]
+            
+            # Group by project within driver
+            projects = sorted(driver_allocations['project_name'].unique())
+            
+            for project_name in projects:
+                proj_allocations = driver_allocations[driver_allocations['project_name'] == project_name]
+                resources_in_project = sorted(proj_allocations['resource_name'].unique())
+                
+                project_resources = []
+                for resource_name in resources_in_project:
+                    resource_allocations = proj_allocations[proj_allocations['resource_name'] == resource_name]
+                    
+                    row_data = []
+                    for month in months:
+                        month_allocations = resource_allocations[resource_allocations['month'] == month]
+                        if not month_allocations.empty:
+                            # Sum percentage allocations for this resource-month
+                            pct = month_allocations['pct_allocation'].sum()
+                            row_data.append(min(pct, 100.0))  # Cap at 100%
+                        else:
+                            row_data.append(0.0)
+                    
+                    project_resources.append({
+                        'resource_name': resource_name,
+                        'data': row_data
+                    })
+                
+                grouped_data.append({
+                    'funding_source': funding_source,
+                    'driver': driver,
+                    'project_name': project_name,
+                    'resources': project_resources
+                })
     
     # Load the Excel workbook
     try:
@@ -497,14 +528,14 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         
         # Add title row
         title_cell = ws['A1']
-        title_cell.value = 'Resource Allocation Heatmap (Grouped by Project)\n(Percentage of resource capacity allocated per month)'
+        title_cell.value = 'Resource Allocation Heatmap (Grouped by Funding Source > Driver > Project)\n(Percentage of resource capacity allocated per month)'
         ws.merge_cells(f'A1:{chr(65 + len(months))}1')
         title_cell.font = Font(bold=True, size=12)
         title_cell.alignment = Alignment(horizontal='center', vertical='center')
         ws.row_dimensions[1].height = 40
         
         # Write header row (row 2)
-        ws.cell(row=2, column=1, value='Project / Resource')
+        ws.cell(row=2, column=1, value='Funding Source / Driver / Project / Resource')
         for col_idx, month in enumerate(months, start=2):
             cell = ws.cell(row=2, column=col_idx, value=month)
             # Format header cells
@@ -522,22 +553,60 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         
         ws.row_dimensions[2].height = 25
         
-        # Write grouped data: one group per project
+        # Write grouped data: funding_source > driver > project > resources
         current_row = 3
         data_start_row = 3
         data_end_row = 2
         
-        project_header_fill = PatternFill(start_color='8FAADC', end_color='8FAADC', fill_type='solid')
-        project_header_font = Font(bold=True, size=11, color='000000')
+        # Color scheme: funding_source (darkest), driver (medium), project (lightest)
+        funding_source_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')  # Dark blue
+        funding_source_font = Font(bold=True, size=12, color='FFFFFF')
         
-        for project_group in grouped_data:
-            project_name = project_group['project_name']
-            resources = project_group['resources']
+        driver_fill = PatternFill(start_color='8FAADC', end_color='8FAADC', fill_type='solid')  # Medium blue
+        driver_font = Font(bold=True, size=11, color='000000')
+        
+        project_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')  # Light blue
+        project_font = Font(bold=True, size=10, color='000000')
+        
+        current_funding_source = None
+        current_driver = None
+        
+        for group in grouped_data:
+            funding_source = group['funding_source']
+            driver = group['driver']
+            project_name = group['project_name']
+            resources = group['resources']
+            
+            # Add funding_source header if changed
+            if funding_source != current_funding_source:
+                if current_funding_source is not None:
+                    current_row += 1  # Gap between funding sources
+                
+                funding_source_header = ws.cell(row=current_row, column=1, value=f'Funding Source: {funding_source if funding_source else "N/A"}')
+                funding_source_header.fill = funding_source_fill
+                funding_source_header.font = funding_source_font
+                funding_source_header.alignment = Alignment(horizontal='left', vertical='center')
+                ws.merge_cells(f'A{current_row}:{chr(65 + len(months))}{current_row}')
+                ws.row_dimensions[current_row].height = 25
+                current_row += 1
+                current_funding_source = funding_source
+                current_driver = None  # Reset driver when funding source changes
+            
+            # Add driver header if changed
+            if driver != current_driver:
+                driver_header = ws.cell(row=current_row, column=1, value=f'  Driver: {driver if driver else "N/A"}')
+                driver_header.fill = driver_fill
+                driver_header.font = driver_font
+                driver_header.alignment = Alignment(horizontal='left', vertical='center')
+                ws.merge_cells(f'A{current_row}:{chr(65 + len(months))}{current_row}')
+                ws.row_dimensions[current_row].height = 22
+                current_row += 1
+                current_driver = driver
             
             # Add project header row
-            project_header = ws.cell(row=current_row, column=1, value=project_name)
-            project_header.fill = project_header_fill
-            project_header.font = project_header_font
+            project_header = ws.cell(row=current_row, column=1, value=f'    Project: {project_name}')
+            project_header.fill = project_fill
+            project_header.font = project_font
             project_header.alignment = Alignment(horizontal='left', vertical='center')
             
             # Merge project header across all columns
@@ -550,7 +619,7 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
                 resource_name = resource['resource_name']
                 row_data = resource['data']
                 
-                ws.cell(row=current_row, column=1, value=resource_name)
+                ws.cell(row=current_row, column=1, value=f'      {resource_name}')  # Indent resource names
                 for col_idx, value in enumerate(row_data, start=2):
                     cell = ws.cell(row=current_row, column=col_idx, value=value)
                     # Format as percentage with 0 decimal places
@@ -560,8 +629,11 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
             
             # Add a small gap row between projects (optional, for better visual separation)
             # Don't add gap after last project
-            if project_group != grouped_data[-1]:
-                current_row += 1
+            if group != grouped_data[-1]:
+                # Check if next group is different funding_source or driver
+                next_group = grouped_data[grouped_data.index(group) + 1]
+                if next_group['funding_source'] != funding_source or next_group['driver'] != driver:
+                    current_row += 1  # Gap between different funding sources or drivers
             data_end_row = current_row - 1
         
         # Apply conditional formatting (heatmap) to data cells (exclude project header rows)
@@ -618,18 +690,26 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         for row in range(3, data_end_row + 1):
             for col in range(1, len(months) + 2):
                 cell = ws.cell(row=row, column=col)
-                # Check if this is a project header row (has project header fill)
-                is_project_header = (cell.fill.start_color.rgb == project_header_fill.start_color.rgb if cell.fill.start_color else False)
+                # Check if it's a header row (funding_source, driver, or project)
+                is_funding_source_header = (cell.fill.start_color.rgb == funding_source_fill.start_color.rgb if cell.fill and cell.fill.start_color else False)
+                is_driver_header = (cell.fill.start_color.rgb == driver_fill.start_color.rgb if cell.fill and cell.fill.start_color else False)
+                is_project_header = (cell.fill.start_color.rgb == project_fill.start_color.rgb if cell.fill and cell.fill.start_color else False)
                 
-                if is_project_header:
-                    # For project headers, add a thicker bottom border
-                    thick_bottom = Border(
-                        left=Side(style='thin'),
-                        right=Side(style='thin'),
-                        top=Side(style='thin'),
-                        bottom=Side(style='medium')
-                    )
+                if is_funding_source_header:
+                    # Thickest border for funding source
+                    thick_bottom = Border(left=Side(style='thin'), right=Side(style='thin'),
+                                          top=Side(style='thin'), bottom=Side(style='thick'))
                     cell.border = thick_bottom
+                elif is_driver_header:
+                    # Medium border for driver
+                    medium_bottom = Border(left=Side(style='thin'), right=Side(style='thin'),
+                                           top=Side(style='thin'), bottom=Side(style='medium'))
+                    cell.border = medium_bottom
+                elif is_project_header:
+                    # Thin-medium border for project
+                    thin_medium_bottom = Border(left=Side(style='thin'), right=Side(style='thin'),
+                                                top=Side(style='thin'), bottom=Side(style='thin'))
+                    cell.border = thin_medium_bottom
                 else:
                     # For resource rows, add thin borders
                     cell.border = thin_border
