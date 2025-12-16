@@ -29,6 +29,71 @@ def months_range(start_date: str, end_date: str) -> List[str]:
     return months
 
 
+def parse_available_months(available_months_str: str, all_months: List[str]) -> set:
+    """Parse available_months string and return set of available months.
+    
+    Supports formats:
+    - "2025-01,2025-02,2025-03" (comma-separated specific months)
+    - "2025-01:2025-06" (range)
+    - "2025-01:2025-03,2025-07:2025-12" (multiple ranges)
+    - Empty or "all" = all months available
+    
+    Args:
+        available_months_str: String with available months specification
+        all_months: List of all months in YYYY-MM format (for validation)
+    
+    Returns:
+        Set of available month strings in YYYY-MM format
+    """
+    if not available_months_str or pd.isna(available_months_str):
+        # Empty or missing = available for all months
+        return set(all_months)
+    
+    available_months_str = str(available_months_str).strip()
+    
+    if available_months_str.lower() == 'all' or available_months_str == '':
+        return set(all_months)
+    
+    available = set()
+    
+    # Split by comma to handle multiple ranges/lists
+    parts = [p.strip() for p in available_months_str.split(',')]
+    
+    for part in parts:
+        if ':' in part:
+            # Range format: "2025-01:2025-06"
+            start_str, end_str = part.split(':', 1)
+            start_str = start_str.strip()
+            end_str = end_str.strip()
+            
+            # Normalize to YYYY-MM format
+            if len(start_str) == 10:
+                start_str = start_str[:7]
+            if len(end_str) == 10:
+                end_str = end_str[:7]
+            
+            try:
+                start = pd.to_datetime(start_str + "-01")
+                end = pd.to_datetime(end_str + "-01")
+                range_months = pd.date_range(start=start, end=end, freq='MS').strftime('%Y-%m').tolist()
+                available.update(range_months)
+            except:
+                # Invalid range, skip
+                continue
+        else:
+            # Single month: "2025-01"
+            month_str = part.strip()
+            if len(month_str) == 10:
+                month_str = month_str[:7]
+            
+            # Validate format
+            if len(month_str) == 7 and month_str[4] == '-':
+                available.add(month_str)
+    
+    # Filter to only include months that exist in all_months
+    return available.intersection(set(all_months))
+
+
 def _is_regex_pattern(skill: str) -> bool:
     """Check if a skill string is a regex pattern.
     

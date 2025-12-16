@@ -58,7 +58,8 @@ def create_template(output_path: str):
             'pod': 'Pod A',
             'technical_skills': 'python,java,sql',
             'functional_skills': 'pricing,risk,development',
-            'cost_per_year': 57000
+            'cost_per_year': 57000,
+            'available_months': ''  # Empty = available for all months. Format: "2025-01:2025-06,2025-09:2025-12" or "2025-01,2025-02,2025-03"
         }
     ])
     

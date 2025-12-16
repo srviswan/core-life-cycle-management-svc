@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Optional
 from utils import (
     months_range, parse_required_skills, calculate_project_priority,
     check_mandatory_skills, calculate_skill_match_score, calculate_effort_alignment,
-    generate_allocation_explanation, normalize_driver
+    generate_allocation_explanation, normalize_driver, parse_available_months
 )
 from config import (
     PRIORITY_WEIGHTS, PRIORITY_WATERFALL_MULTIPLIER, SOLVER_TYPE,
@@ -205,6 +205,14 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     
     all_months = sorted(list(all_months))
     
+    # Parse resource availability
+    resource_available_months = {}  # resource_id -> set of available months
+    for _, resource_row in resources_df.iterrows():
+        resource_id = str(resource_row['brid'])
+        available_months_str = resource_row.get('available_months', '')
+        available_months = parse_available_months(available_months_str, all_months)
+        resource_available_months[resource_id] = available_months
+    
     # Create solver
     if solver_type == 'CBC':
         solver = pywraplp.Solver.CreateSolver('CBC')
@@ -245,8 +253,15 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             skill_match = calculate_skill_match_score(resource_row, proj_info['required_skills'])
             skill_scores[(resource_id, pid)] = skill_match
             
-            # Create variables for each month in project timeline
+            # Get available months for this resource
+            available_months = resource_available_months.get(resource_id, set(all_months))
+            
+            # Create variables for each month in project timeline (only if resource is available)
             for month in proj_info['months']:
+                # Only create variable if resource is available in this month
+                if month not in available_months:
+                    continue  # Skip - resource not available in this month
+                
                 var_name = f'x_{resource_id}_p{pid}_m{month}'
                 # Variable represents cost allocated (not FTE)
                 # Upper bound: resource monthly cost (can't allocate more than resource costs)
@@ -256,11 +271,17 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Constraints
     
     # Constraint 1: Resource capacity - sum of allocations per resource-month ≤ monthly cost
+    # Only applies to months when resource is available
     for resource_id in resource_ids:
         resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
         resource_monthly_cost = float(resource_row['cost_per_month'])
+        available_months = resource_available_months.get(resource_id, set(all_months))
         
         for month in all_months:
+            # Only add constraint for months when resource is available
+            if month not in available_months:
+                continue  # Resource not available in this month, no constraint needed
+            
             constraint = solver.Constraint(0.0, resource_monthly_cost, f'resource_capacity_{resource_id}_{month}')
             for (rid, pid, m), var in variables.items():
                 if rid == resource_id and m == month:
