@@ -65,6 +65,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     allocs_with_fte['cost_per_month'] = allocs_with_fte['cost_per_year'] / 12.0
     allocs_with_fte['fte_allocated'] = allocs_with_fte['allocated_cost'] / allocs_with_fte['cost_per_month']
     allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].fillna(0.0)
+    allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].round(2)  # Round FTE to 2 decimal places
     
     # Allocations sheet (includes both real and dummy resources)
     allocations_sheet = allocs_with_fte[[
@@ -87,24 +88,25 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         proj_allocations = allocs_df[allocs_df['project_id'] == pid]
         proj_allocations_with_fte = allocs_with_fte[allocs_with_fte['project_id'] == pid]
         
-        allocated_budget = proj_allocations['allocated_cost'].sum()
-        allocated_fte = proj_allocations_with_fte['fte_allocated'].sum()
+        allocated_budget = round(proj_allocations['allocated_cost'].sum())  # Round currency to nearest whole number
+        allocated_fte = round(proj_allocations_with_fte['fte_allocated'].sum(), 2)  # Round FTE to 2 decimal places
         months_active = len(set(proj_allocations['month']))
         # Average FTE = total FTE-months / number of months allocated
-        annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
+        annual_fte_allocated = round(allocated_fte / months_active, 2) if months_active > 0 and allocated_fte > 0 else 0.0  # Round to 2 decimal places
         
         # Get requested_budget (bottom-up ask) - default to alloc_budget if not provided (backward compatible)
         requested_budget = float(proj_row.get('requested_budget', 0))
         if pd.isna(requested_budget) or requested_budget == 0:
             # If not provided, default to alloc_budget (backward compatibility)
             requested_budget = float(proj_row.get('alloc_budget', 0))
+        requested_budget = round(requested_budget)  # Round currency to nearest whole number
         
-        total_budget = float(proj_row.get('alloc_budget', 0))  # Maximum budget that can be allocated (constraint)
-        budget_utilization = (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0
+        total_budget = round(float(proj_row.get('alloc_budget', 0)))  # Maximum budget that can be allocated (constraint), round currency
+        budget_utilization = round((allocated_budget / total_budget * 100), 2) if total_budget > 0 else 0.0  # Round percentage to 2 decimal places
         
         # Calculate budget gap and fulfillment percentage
-        budget_gap = requested_budget - allocated_budget  # Positive gap = unfunded request
-        budget_fulfillment_pct = (allocated_budget / requested_budget * 100) if requested_budget > 0 else 0.0
+        budget_gap = round(requested_budget - allocated_budget)  # Positive gap = unfunded request, round currency
+        budget_fulfillment_pct = round((allocated_budget / requested_budget * 100), 2) if requested_budget > 0 else 0.0  # Round percentage to 2 decimal places
         
         priority_score = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
         # Count real resources only (exclude dummy resources)
@@ -148,23 +150,23 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         resource_id = str(resource_row['brid'])
         resource_allocations = allocs_df[allocs_df['resource_id'] == resource_id]
         
-        total_allocated_cost = resource_allocations['allocated_cost'].sum()
+        total_allocated_cost = round(resource_allocations['allocated_cost'].sum())  # Round currency to nearest whole number
         annual_cost = float(resource_row.get('cost_per_year', 0))
         monthly_cost = annual_cost / 12.0 if annual_cost > 0 else 0.0
-        utilization_pct = (total_allocated_cost / (monthly_cost * 12) * 100) if monthly_cost > 0 else 0.0
+        utilization_pct = round((total_allocated_cost / (monthly_cost * 12) * 100), 2) if monthly_cost > 0 else 0.0  # Round percentage to 2 decimal places
         
         # Calculate FTE
         # FTE = allocated_cost / monthly_cost (for each month, then sum)
         total_fte_allocated = 0.0
         if monthly_cost > 0:
             # Sum FTE across all allocations (total FTE-months)
-            total_fte_allocated = resource_allocations['allocated_cost'].sum() / monthly_cost
+            total_fte_allocated = round(resource_allocations['allocated_cost'].sum() / monthly_cost, 2)  # Round FTE to 2 decimal places
         
         projects_allocated = len(set(resource_allocations['project_id']))
         months_active = len(set(resource_allocations['month']))
         
         # Average FTE = total FTE-months / number of months allocated
-        annual_fte_allocated = total_fte_allocated / months_active if months_active > 0 and total_fte_allocated > 0 else 0.0
+        annual_fte_allocated = round(total_fte_allocated / months_active, 2) if months_active > 0 and total_fte_allocated > 0 else 0.0  # Round to 2 decimal places
         
         resource_summary_data.append({
             'resource_id': resource_id,
@@ -263,12 +265,12 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         proj_allocations = allocs_df[allocs_df['project_id'] == pid]
         proj_allocations_with_fte = allocs_with_fte[allocs_with_fte['project_id'] == pid]
         
-        allocated_budget = proj_allocations['allocated_cost'].sum()
-        allocated_fte = proj_allocations_with_fte['fte_allocated'].sum()
+        allocated_budget = round(proj_allocations['allocated_cost'].sum())  # Round currency to nearest whole number
+        allocated_fte = round(proj_allocations_with_fte['fte_allocated'].sum(), 2)  # Round FTE to 2 decimal places
         months_active = len(set(proj_allocations['month']))
         # Average FTE = total FTE-months / number of months allocated
-        annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
-        total_budget = float(proj_row.get('alloc_budget', 0))
+        annual_fte_allocated = round(allocated_fte / months_active, 2) if months_active > 0 and allocated_fte > 0 else 0.0  # Round to 2 decimal places
+        total_budget = round(float(proj_row.get('alloc_budget', 0)))  # Round currency to nearest whole number
         
         if total_budget > 0 and allocated_budget < total_budget * 0.95:  # Less than 95% allocated
             # Check if it's due to skill constraints
@@ -287,10 +289,10 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
                     'project_id': pid,
                     'project_name': str(proj_row.get('project_name', f'Project {pid}')),
                     'total_budget': total_budget,
-                    'allocated_budget': allocated_budget,
-                    'allocated_fte': allocated_fte,
-                    'annual_fte_allocated': annual_fte_allocated,
-                    'utilization_pct': (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0,
+                    'allocated_budget': allocated_budget,  # Already rounded
+                    'allocated_fte': allocated_fte,  # Already rounded to 2 decimals
+                    'annual_fte_allocated': annual_fte_allocated,  # Already rounded to 2 decimals
+                    'utilization_pct': round((allocated_budget / total_budget * 100), 2) if total_budget > 0 else 0.0,  # Round percentage to 2 decimal places
                     'mandatory_skills': ', '.join(mandatory_skills),
                     'resources_without_skills': cannot_allocate_count,
                     'reason': 'Mandatory skills constraint - insufficient resources with required skills'
@@ -308,16 +310,16 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         proj_allocations = allocs_df[allocs_df['project_id'] == pid]
         proj_allocations_with_fte = allocs_with_fte[allocs_with_fte['project_id'] == pid]
         
-        allocated_budget = proj_allocations['allocated_cost'].sum()
-        allocated_fte = proj_allocations_with_fte['fte_allocated'].sum()
+        allocated_budget = round(proj_allocations['allocated_cost'].sum())  # Round currency to nearest whole number
+        allocated_fte = round(proj_allocations_with_fte['fte_allocated'].sum(), 2)  # Round FTE to 2 decimal places
         months_active = len(set(proj_allocations['month']))
-        annual_fte_allocated = allocated_fte / months_active if months_active > 0 and allocated_fte > 0 else 0.0
-        total_budget = float(proj_row.get('alloc_budget', 0))
-        utilization_pct = (allocated_budget / total_budget * 100) if total_budget > 0 else 0.0
+        annual_fte_allocated = round(allocated_fte / months_active, 2) if months_active > 0 and allocated_fte > 0 else 0.0  # Round to 2 decimal places
+        total_budget = round(float(proj_row.get('alloc_budget', 0)))  # Round currency to nearest whole number
+        utilization_pct = round((allocated_budget / total_budget * 100), 2) if total_budget > 0 else 0.0  # Round percentage to 2 decimal places
         
         # Only include budgeted projects that are not fully utilized (< 99.5% to account for rounding)
         if total_budget > 0 and utilization_pct < 99.5:
-            budget_gap = total_budget - allocated_budget
+            budget_gap = round(total_budget - allocated_budget)  # Round currency to nearest whole number
             req_skills = parse_required_skills(proj_row.get('required_skills'))
             
             # Calculate required skills
@@ -344,7 +346,8 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
             # Estimate FTE needed to fill the gap
             # Use average resource cost if we have eligible resources
             avg_resource_cost = sum(r['cost_per_year'] for r in eligible_resources) / len(eligible_resources) if eligible_resources else 0
-            estimated_fte_needed = (budget_gap / avg_resource_cost) if avg_resource_cost > 0 else 0
+            avg_resource_cost_monthly = avg_resource_cost / 12.0 if avg_resource_cost > 0 else 0.0
+            estimated_fte_needed = round((budget_gap / avg_resource_cost_monthly), 2) if avg_resource_cost_monthly > 0 else 0.0  # Round FTE to 2 decimal places
             
             # Build skill requirements summary
             skill_requirements = []
@@ -365,12 +368,12 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
                 'project_id': pid,
                 'project_name': str(proj_row.get('project_name', f'Project {pid}')),
                 'total_budget': total_budget,
-                'allocated_budget': allocated_budget,
-                'budget_gap': budget_gap,
-                'utilization_pct': utilization_pct,
-                'allocated_fte': allocated_fte,
-                'annual_fte_allocated': annual_fte_allocated,
-                'estimated_fte_needed': estimated_fte_needed,
+                'allocated_budget': allocated_budget,  # Already rounded
+                'budget_gap': budget_gap,  # Already rounded
+                'utilization_pct': utilization_pct,  # Already rounded to 2 decimals
+                'allocated_fte': allocated_fte,  # Already rounded to 2 decimals
+                'annual_fte_allocated': annual_fte_allocated,  # Already rounded to 2 decimals
+                'estimated_fte_needed': estimated_fte_needed,  # Already rounded to 2 decimals
                 'eligible_resources_count': len(eligible_resources),
                 'total_resources_count': len(resources_df),
                 'required_skills': '; '.join(skill_requirements) if skill_requirements else 'None specified',
@@ -436,6 +439,8 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
     allocations_with_fte['cost_per_month'] = allocations_with_fte['cost_per_year'] / 12.0
     allocations_with_fte['fte_allocated'] = allocations_with_fte['allocated_cost'] / allocations_with_fte['cost_per_month']
     allocations_with_fte['fte_allocated'] = allocations_with_fte['fte_allocated'].fillna(0.0)
+    allocations_with_fte['fte_allocated'] = allocations_with_fte['fte_allocated'].round(2)  # Round FTE to 2 decimal places
+    allocations_with_fte['fte_allocated'] = allocations_with_fte['fte_allocated'].round(2)  # Round FTE to 2 decimal places
     
     # Merge with projects to get funding_source and driver
     allocations_with_fte = allocations_with_fte.merge(
@@ -455,7 +460,7 @@ def generate_gantt_chart(allocations_df: pd.DataFrame, resources_df: pd.DataFram
         if not resource_row.empty:
             resource_monthly_cost = resource_row.iloc[0]['cost_per_year'] / 12.0
             if resource_monthly_cost > 0:
-                allocations_with_fte.at[idx, 'pct_allocation'] = (row['allocated_cost'] / resource_monthly_cost * 100)
+                allocations_with_fte.at[idx, 'pct_allocation'] = round((row['allocated_cost'] / resource_monthly_cost * 100), 2)  # Round percentage to 2 decimal places
     
     # Get unique months
     months = sorted(allocations_with_fte['month'].unique())
@@ -739,7 +744,7 @@ def create_pivot_table_sheet(wb, allocations_with_fte: pd.DataFrame, projects_df
         project_id = alloc_row['project_id']
         project_name = alloc_row['project_name']
         month = alloc_row['month']
-        allocated_cost = alloc_row['allocated_cost']
+        allocated_cost = round(alloc_row['allocated_cost'])  # Round currency to nearest whole number
         fte_allocated = alloc_row['fte_allocated']
         pct_allocation = alloc_row['pct_allocation']
         
@@ -760,9 +765,9 @@ def create_pivot_table_sheet(wb, allocations_with_fte: pd.DataFrame, projects_df
             'Resource ID': resource_id,
             'Resource Name': resource_name,
             'Month': month,
-            'Allocated Cost': allocated_cost,
-            'FTE Allocated': fte_allocated,
-            'Pct Allocation': pct_allocation
+            'Allocated Cost': allocated_cost,  # Already rounded to whole number
+            'FTE Allocated': round(fte_allocated, 2),  # Round FTE to 2 decimal places
+            'Pct Allocation': round(pct_allocation, 2)  # Round percentage to 2 decimal places
         })
     
     pivot_df = pd.DataFrame(pivot_data)

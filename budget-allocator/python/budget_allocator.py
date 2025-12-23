@@ -635,7 +635,7 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                 'project_id': pid,
                 'project_name': proj_info['project_name'],
                 'month': month,
-                'allocated_cost': allocated_cost,
+                'allocated_cost': round(allocated_cost),  # Round currency to nearest whole number
                 'priority_score': priority_score,
                 'skill_match_score': skill_match['overall_score'],
                 'effort_alignment': effort_alignment,
@@ -734,6 +734,9 @@ def _create_dummy_resources_for_remaining_budget(
                 # Calculate FTE needed
                 fte_needed = remaining_budget / avg_monthly_cost if avg_monthly_cost > 0 else 0.0
                 
+                # Round remaining budget to nearest whole number (currency)
+                remaining_budget_rounded = round(remaining_budget)
+                
                 # Create dummy allocation
                 dummy_allocations.append({
                     'resource_id': dummy_resource_id,
@@ -741,11 +744,11 @@ def _create_dummy_resources_for_remaining_budget(
                     'project_id': pid,
                     'project_name': proj_info['project_name'],
                     'month': month,
-                    'allocated_cost': remaining_budget,
+                    'allocated_cost': remaining_budget_rounded,  # Round currency to nearest whole number
                     'priority_score': proj_info.get('priority', 0.5),
                     'skill_match_score': 0.0,  # Dummy resource - no skill match
                     'effort_alignment': 0.0,  # Dummy resource - no effort alignment
-                    'explanation': f"Dummy resource (new hire needed): {fte_needed:.2f} FTE, Location: {best_location}, Team: {team_name or 'N/A'}, Sub-team: {sub_team_name or 'N/A'}, Pod: {pod_name or 'N/A'}, Cost: £{remaining_budget:,.2f}"
+                    'explanation': f"Dummy resource (new hire needed): {fte_needed:.2f} FTE, Location: {best_location}, Team: {team_name or 'N/A'}, Sub-team: {sub_team_name or 'N/A'}, Pod: {pod_name or 'N/A'}, Cost: £{remaining_budget_rounded:,.0f}"
                 })
     
     return dummy_allocations
