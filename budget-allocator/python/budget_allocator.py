@@ -13,7 +13,7 @@ from utils import (
 from config import (
     PRIORITY_WEIGHTS, PRIORITY_WATERFALL_MULTIPLIER, SOLVER_TYPE,
     EFFORT_ESTIMATE_WEIGHT, SKILL_MATCH_WEIGHT, PRIORITY_WEIGHT,
-    REGION_DIVERSITY_WEIGHT
+    REGION_DIVERSITY_WEIGHT, TEAM_ALIGNMENT_WEIGHT
 )
 
 
@@ -183,6 +183,11 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         # Get driver cap within funding source
         driver_cap = driver_caps.get((funding_source, driver), 0.0) if funding_source and driver else 0.0
         
+        # Get team, sub_team, pod preferences (optional - for team alignment)
+        preferred_team = str(proj_row.get('team', '')).strip() if pd.notna(proj_row.get('team')) else ''
+        preferred_sub_team = str(proj_row.get('sub_team', '')).strip() if pd.notna(proj_row.get('sub_team')) else ''
+        preferred_pod = str(proj_row.get('pod', '')).strip() if pd.notna(proj_row.get('pod')) else ''
+        
         project_data[pid] = {
             'required_skills': req_skills,
             'alloc_budget': float(proj_row.get('alloc_budget', 0)),
@@ -197,7 +202,10 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             'funding_source': funding_source,
             'funding_source_priority': funding_source_priority,
             'driver_rank': driver_rank,  # Rank within (funding_source + driver)
-            'max_resource_allocation_pct': max_resource_allocation_pct
+            'max_resource_allocation_pct': max_resource_allocation_pct,
+            'preferred_team': preferred_team,
+            'preferred_sub_team': preferred_sub_team,
+            'preferred_pod': preferred_pod
         }
     
     if projects_without_effort:
@@ -226,13 +234,22 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     variables = {}
     resource_ids = resources_df['brid'].tolist()
     skill_scores = {}  # Cache skill match scores
+    team_alignment_scores = {}  # Cache team/sub_team/pod alignment scores
     resource_locations = {}  # Cache resource locations for region diversity
+    resource_teams = {}  # Cache resource team/sub_team/pod info
     
-    # Build resource location map
+    # Build resource location and team maps
     for _, resource_row in resources_df.iterrows():
         resource_id = str(resource_row['brid'])
         location = str(resource_row.get('location', '')).strip()
         resource_locations[resource_id] = location
+        
+        # Cache team/sub_team/pod for team alignment
+        resource_teams[resource_id] = {
+            'team': str(resource_row.get('team', '')).strip() if pd.notna(resource_row.get('team')) else '',
+            'sub_team': str(resource_row.get('sub_team', '')).strip() if pd.notna(resource_row.get('sub_team')) else '',
+            'pod': str(resource_row.get('pod', '')).strip() if pd.notna(resource_row.get('pod')) else ''
+        }
     
     # Get all unique locations
     all_locations = set(resource_locations.values())
@@ -249,7 +266,50 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             if not can_allocate:
                 continue  # Skip - hard constraint
             
-            # Calculate skill match score
+            # Calculate team/sub_team/pod alignment score (BEFORE skill matching preference)
+            # This is a strong preference - resources matching team/sub_team/pod are preferred
+            # If no team/sub_team/pod match, system falls back to skill-based matching
+            team_alignment = 0.0
+            preferred_team = proj_info.get('preferred_team', '')
+            preferred_sub_team = proj_info.get('preferred_sub_team', '')
+            preferred_pod = proj_info.get('preferred_pod', '')
+            
+            # If project has no team preferences, team_alignment = 0.0 (neutral, no preference)
+            # System will use skill-based matching
+            if preferred_team or preferred_sub_team or preferred_pod:
+                resource_team_info = resource_teams.get(resource_id, {'team': '', 'sub_team': '', 'pod': ''})
+                resource_team = resource_team_info.get('team', '')
+                resource_sub_team = resource_team_info.get('sub_team', '')
+                resource_pod = resource_team_info.get('pod', '')
+                
+                # Calculate alignment: perfect match = 1.0, partial match = 0.5, no match = 0.0
+                # Weight: pod (most specific) > sub_team > team (least specific)
+                # Perfect match (all three) = 1.0
+                # Pod + sub_team match = 0.8
+                # Pod match only = 0.5
+                # Sub_team match only = 0.3
+                # Team match only = 0.2
+                
+                pod_match = preferred_pod and resource_pod and (preferred_pod.lower() == resource_pod.lower())
+                sub_team_match = preferred_sub_team and resource_sub_team and (preferred_sub_team.lower() == resource_sub_team.lower())
+                team_match = preferred_team and resource_team and (preferred_team.lower() == resource_team.lower())
+                
+                if pod_match and sub_team_match and team_match:
+                    team_alignment = 1.0  # Perfect match
+                elif pod_match and sub_team_match:
+                    team_alignment = 0.8  # Pod + sub_team match
+                elif pod_match:
+                    team_alignment = 0.5  # Pod match only
+                elif sub_team_match:
+                    team_alignment = 0.3  # Sub_team match only
+                elif team_match:
+                    team_alignment = 0.2  # Team match only
+                else:
+                    team_alignment = 0.0  # No match - will fallback to skill matching
+            
+            team_alignment_scores[(resource_id, pid)] = team_alignment
+            
+            # Calculate skill match score (fallback if no team alignment)
             skill_match = calculate_skill_match_score(resource_row, proj_info['required_skills'])
             skill_scores[(resource_id, pid)] = skill_match
             
@@ -435,7 +495,13 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         priority_factor = 1.0 / (waterfall_multiplier ** (max_priority - priority))
         priority_coeff = priority_weight * priority_factor
         
-        # Skill match preference
+        # Team/Sub-team/Pod alignment preference (STRONGER than skill matching)
+        # This is checked BEFORE skill matching - resources matching team/sub_team/pod are strongly preferred
+        # If no team alignment, system falls back to skill-based matching
+        team_alignment = team_alignment_scores.get((resource_id, pid), 0.0)
+        team_coeff = TEAM_ALIGNMENT_WEIGHT * team_alignment  # High weight to prioritize team alignment
+        
+        # Skill match preference (fallback if no team alignment)
         skill_match = skill_scores.get((resource_id, pid), {'overall_score': 0.5})
         skill_coeff = skill_weight * skill_match['overall_score']
         
@@ -472,8 +538,10 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
         # Total coefficient
         # Base coefficient (very high for budgeted projects) ensures full utilization is prioritized
         # NEW HIERARCHY: Funding Source > Driver > Rank (within funding_source+driver) > Priority
+        # Team alignment is STRONGER than skill matching - prefer team/sub_team/pod matches first
+        # If no team alignment, skill matching provides fallback preference
         # Region diversity bonus encourages cross-region allocation (higher for less common regions)
-        total_coeff = base_coeff + funding_source_coeff + driver_coeff + rank_coeff + priority_coeff + skill_coeff + effort_coeff + region_diversity_bonus
+        total_coeff = base_coeff + funding_source_coeff + driver_coeff + rank_coeff + priority_coeff + team_coeff + skill_coeff + effort_coeff + region_diversity_bonus
         
         objective.SetCoefficient(var, total_coeff)
     
@@ -507,6 +575,7 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             # Generate explanation using utility function
             priority_score = proj_info['priority']
             project_rank = None  # Could be calculated from sorted projects
+            team_alignment = team_alignment_scores.get((resource_id, pid), 0.0)
             explanation = generate_allocation_explanation(
                 resource_id=resource_id,
                 resource_name=str(resource_row.get('employee_name', resource_id)),
@@ -522,7 +591,8 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                 },
                 effort_alignment=effort_alignment,
                 is_efficiency_project=proj_info['is_efficiency'],
-                project_rank=project_rank
+                project_rank=project_rank,
+                team_alignment=team_alignment
             )
             
             allocations.append({

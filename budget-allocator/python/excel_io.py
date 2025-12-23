@@ -26,6 +26,9 @@ def create_template(output_path: str):
             'effort_estimate_man_months': 6.0,
             'start_date': '2025-01',
             'end_date': '2025-06',
+            'team': 'Engineering',  # Preferred team for allocation (optional)
+            'sub_team': 'Backend',  # Preferred sub-team for allocation (optional)
+            'pod': 'Pod A',  # Preferred pod for allocation (optional)
             'required_skills': 'python,sql|java',  # Simple format: python AND sql OR java
             # Alternative JSON format (legacy, still supported):
             # json.dumps({
@@ -352,6 +355,9 @@ def create_sample_input(output_path: str):
             'effort_estimate_man_months': 6.0 + i * 0.5,
             'start_date': '2025-01',
             'end_date': '2025-06',
+            'team': 'Engineering',  # Preferred team
+            'sub_team': 'Backend' if i % 2 == 0 else 'Platform',  # Preferred sub-team
+            'pod': f'Pod {chr(65 + (i % 5))}',  # Preferred pod (A-E)
             'required_skills': json.dumps({
                 'technical': ['python', 'java'] if i % 2 == 0 else ['java', 'sql'],
                 'functional': ['pricing', 'risk'],
@@ -375,6 +381,9 @@ def create_sample_input(output_path: str):
             'effort_estimate_man_months': 4.0 + (i-8) * 0.3,
             'start_date': '2025-02',
             'end_date': '2025-08',
+            'team': 'Engineering',  # Preferred team
+            'sub_team': 'Frontend' if (i-8) % 2 == 0 else 'Backend',  # Preferred sub-team
+            'pod': f'Pod {chr(70 + ((i-8) % 3))}',  # Preferred pod (F-H)
             'required_skills': json.dumps({
                 'technical': ['sql', 'python'],
                 'functional': ['development', 'testing'],
@@ -398,6 +407,9 @@ def create_sample_input(output_path: str):
             'effort_estimate_man_months': 3.0 + (i-13) * 0.2,
             'start_date': '2025-03',
             'end_date': '2025-09',
+            'team': '',  # Efficiency projects - no team preference
+            'sub_team': '',
+            'pod': '',
             'required_skills': json.dumps({
                 'technical': ['python', 'java'],
                 'functional': ['analysis'],

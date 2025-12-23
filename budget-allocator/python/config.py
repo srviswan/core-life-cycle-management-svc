@@ -31,3 +31,9 @@ PRIORITY_WEIGHT = 1.0
 # Region diversity weight in objective function
 # Higher values encourage cross-region allocation (diversity bonus)
 REGION_DIVERSITY_WEIGHT = 0.1
+
+# Team/Sub-team/Pod alignment weight in objective function
+# Higher values strongly prefer resources matching project's team/sub_team/pod
+# This should be HIGHER than skill matching to prioritize team alignment first
+# If no team/sub_team/pod match, system falls back to skill-based matching
+TEAM_ALIGNMENT_WEIGHT = 5.0  # Much higher than skill match (0.2) to prioritize team alignment

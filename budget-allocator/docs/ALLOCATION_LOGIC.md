@@ -96,6 +96,42 @@ Example with multiplier = 100.0:
 
 This creates exponential preference for higher priority.
 
+## Team/Sub-team/Pod Alignment (Primary Preference)
+
+### Overview
+
+Before skill matching, the system strongly prefers resources that match the project's preferred team, sub-team, and pod. This ensures resources are allocated within their organizational units when possible.
+
+### Alignment Score Calculation
+
+The team alignment score is calculated based on matches:
+- **Perfect match** (team + sub_team + pod): 1.0
+- **Pod + sub_team match**: 0.8
+- **Pod match only**: 0.5
+- **Sub_team match only**: 0.3
+- **Team match only**: 0.2
+- **No match**: 0.0 (fallback to skill-based matching)
+
+### Allocation Strategy
+
+1. **First Priority**: Resources matching project's team/sub_team/pod are strongly preferred
+   - Weight in objective function: `TEAM_ALIGNMENT_WEIGHT = 5.0` (much higher than skill matching)
+   - This ensures team alignment is prioritized over skill matching
+
+2. **Fallback**: If no resources match team/sub_team/pod preferences:
+   - System falls back to skill-based matching
+   - Skill matching weight: `SKILL_MATCH_WEIGHT = 0.2` (lower than team alignment)
+
+3. **No Preferences**: If project has no team/sub_team/pod preferences:
+   - System uses skill-based matching (neutral behavior)
+
+### Implementation
+
+- Team alignment is calculated **before** skill matching
+- Team alignment coefficient in objective function: `TEAM_ALIGNMENT_WEIGHT × team_alignment_score`
+- Skill matching coefficient: `SKILL_MATCH_WEIGHT × skill_score`
+- Since `TEAM_ALIGNMENT_WEIGHT (5.0) >> SKILL_MATCH_WEIGHT (0.2)`, team-aligned resources are strongly preferred
+
 ## Skill Matching
 
 ### Mandatory Skills (Hard Constraint)
@@ -104,7 +140,7 @@ Resources MUST have ALL mandatory skills to be allocated to a project.
 
 **Implementation**: Variables are not created for resource-project pairs where mandatory skills don't match.
 
-### Skill Match Score (Soft Preference)
+### Skill Match Score (Soft Preference - Fallback)
 
 Calculated for technical and functional skills:
 
@@ -114,7 +150,7 @@ functional_score = matched_functional_skills / total_required_functional_skills
 overall_score = 0.6 × technical_score + 0.4 × functional_score
 ```
 
-Used in objective function to prefer better matches.
+Used in objective function as fallback when no team alignment is found, or as secondary preference when team alignment exists.
 
 ## Effort Estimate Integration
 

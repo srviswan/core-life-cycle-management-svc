@@ -722,7 +722,8 @@ def calculate_effort_alignment(allocated_cost: float, resource_monthly_cost: flo
 def generate_allocation_explanation(resource_id: str, resource_name: str, project_id: int, 
                                    project_name: str, allocated_cost: float, priority_score: float,
                                    skill_scores: Dict[str, float], effort_alignment: float,
-                                   is_efficiency_project: bool, project_rank: Optional[int] = None) -> str:
+                                   is_efficiency_project: bool, project_rank: Optional[int] = None,
+                                   team_alignment: float = 0.0) -> str:
     """Generate human-readable explanation for an allocation.
     
     Args:
@@ -753,17 +754,36 @@ def generate_allocation_explanation(resource_id: str, resource_name: str, projec
         parts.append("lower priority project")
     parts.append(f"(priority score: {priority_score:.2f})")
     
-    # Skill match
+    # Team/Sub-team/Pod alignment (checked BEFORE skill matching)
+    if team_alignment > 0.0:
+        if team_alignment >= 0.8:
+            parts.append("perfect team alignment")
+        elif team_alignment >= 0.5:
+            parts.append("good team alignment")
+        else:
+            parts.append("partial team alignment")
+        parts.append(f"(team alignment: {team_alignment:.0%})")
+    # If team_alignment = 0.0, don't mention it (fallback to skill-based)
+    
+    # Skill match (fallback if no team alignment, or secondary if team alignment exists)
     overall_skill = skill_scores.get('overall_score', 0.0)
-    if overall_skill >= 0.9:
-        parts.append("perfect skill match")
-    elif overall_skill >= 0.7:
-        parts.append("good skill match")
-    elif overall_skill >= 0.5:
-        parts.append("moderate skill match")
+    if team_alignment == 0.0:  # Only mention skill match prominently if no team alignment
+        if overall_skill >= 0.9:
+            parts.append("perfect skill match")
+        elif overall_skill >= 0.7:
+            parts.append("good skill match")
+        elif overall_skill >= 0.5:
+            parts.append("moderate skill match")
+        else:
+            parts.append("basic skill match")
+        parts.append(f"(skill score: {overall_skill:.0%})")
     else:
-        parts.append("basic skill match")
-    parts.append(f"(skill score: {overall_skill:.0%})")
+        # Team alignment found, skill match is secondary
+        if overall_skill >= 0.7:
+            parts.append("with excellent skills")
+        elif overall_skill >= 0.5:
+            parts.append("with good skills")
+        # Don't mention poor skill matches if team alignment exists
     
     # Mandatory skills
     if skill_scores.get('mandatory_met', True):

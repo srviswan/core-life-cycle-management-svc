@@ -19,6 +19,7 @@ The Budget Allocator uses linear programming (OR-Tools) to solve the resource al
 - ✅ Hard constraint on mandatory skills with AND/OR operators
 - ✅ Priority calculation from Driver + Impact + Rank (weighted sum)
 - ✅ Waterfall allocation (highest priority first)
+- ✅ **Team/Sub-team/Pod Alignment** - Resources matching project's team/sub_team/pod are strongly preferred BEFORE skill matching
 - ✅ **Driver-based allocation caps** - Projects within a driver fully allocated before moving to other drivers
 - ✅ **Funding source prioritization** - Priority and rank considered within each funding_source
 - ✅ **Simplified skill system with regex** - Easy-to-use skill matching with AND/OR operators and regex patterns
@@ -99,6 +100,9 @@ Required columns:
 - `effort_estimate_man_months` - Planned effort
 - `start_date` - Start date (YYYY-MM or YYYY-MM-DD)
 - `end_date` - End date (YYYY-MM or YYYY-MM-DD)
+- `team` - Preferred team for allocation (optional)
+- `sub_team` - Preferred sub-team for allocation (optional)
+- `pod` - Preferred pod for allocation (optional)
 - `required_skills` - JSON string with technical, functional, mandatory skills
 - `comments` - Comments/notes
 
@@ -127,12 +131,14 @@ Required columns:
    - **Driver** (highest priority) - Projects within driver fully allocated first
    - **Funding Source** - Priority and rank considered within each funding_source
    - **Project Priority** - Overall project priority
-3. **Skill Matching**: Resources must meet skill requirements with AND/OR logic (hard constraint)
-4. **Optimization**: OR-Tools solver maximizes allocation with preferences for:
+3. **Team/Sub-team/Pod Alignment**: Resources matching project's preferred team/sub_team/pod are strongly preferred (BEFORE skill matching)
+4. **Skill Matching**: Resources must meet skill requirements with AND/OR logic (hard constraint). Used as fallback if no team alignment.
+5. **Optimization**: OR-Tools solver maximizes allocation with preferences for:
    - Driver caps (waterfall within drivers)
    - Funding source prioritization (waterfall within funding sources)
    - Higher priority projects (waterfall)
-   - Better skill matches
+   - Team/sub_team/pod alignment (stronger than skill matching)
+   - Better skill matches (fallback if no team alignment)
    - Effort estimate alignment
 5. **Efficiency Projects**: Projects with no budget use unallocated resources
 6. **Explanation Generation**: Each allocation includes a human-readable explanation
