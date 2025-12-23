@@ -585,6 +585,9 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Track allocated budget per project per month
     project_month_allocated = defaultdict(lambda: defaultdict(float))  # project_id -> month -> allocated_cost
     
+    # Track resource utilization per resource per month (to check if resources are fully utilized)
+    resource_month_utilized = defaultdict(lambda: defaultdict(float))  # resource_id -> month -> allocated_cost
+    
     for (resource_id, pid, month), var in variables.items():
         allocated_cost = var.solution_value()
         
@@ -594,6 +597,9 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             
             # Track allocated budget
             project_month_allocated[pid][month] += allocated_cost
+            
+            # Track resource utilization
+            resource_month_utilized[resource_id][month] += allocated_cost
             
             # Get skill scores
             skill_match = skill_scores.get((resource_id, pid), {'overall_score': 0.5})
@@ -643,9 +649,10 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             })
     
     # Create dummy resources for remaining budget
-    # Calculate remaining budget per project per month and create dummy resources
+    # Only create dummy resources if there are no available resources that could fulfill the remaining budget
     dummy_resources = _create_dummy_resources_for_remaining_budget(
-        project_data, project_month_allocated, resources_df, all_months
+        project_data, project_month_allocated, resource_month_utilized, resources_df, 
+        resource_available_months, resource_teams, all_months, variables
     )
     allocations.extend(dummy_resources)
     
@@ -653,19 +660,24 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
 
 
 def _create_dummy_resources_for_remaining_budget(
-    project_data: Dict, project_month_allocated: Dict, resources_df: pd.DataFrame, all_months: List[str]
+    project_data: Dict, project_month_allocated: Dict, resource_month_utilized: Dict,
+    resources_df: pd.DataFrame, resource_available_months: Dict, resource_teams: Dict,
+    all_months: List[str], variables: Dict
 ) -> List[Dict]:
     """Create dummy resources for remaining budget after allocation.
     
-    For projects with remaining budget, create dummy resources that represent new hires.
-    These dummy resources are placed in the best location (for location balance) and
-    have appropriate cost (for cost balance).
+    Only creates dummy resources when there are no available existing resources that could
+    fulfill the remaining budget (due to team constraints, skill constraints, availability, or capacity).
     
     Args:
         project_data: Dictionary of project information
         project_month_allocated: Dictionary tracking allocated budget per project per month
+        resource_month_utilized: Dictionary tracking resource utilization per resource per month
         resources_df: DataFrame with existing resources (for cost/location reference)
+        resource_available_months: Dictionary of resource_id -> set of available months
+        resource_teams: Dictionary of resource_id -> {team, sub_team, pod}
         all_months: List of all months in the allocation period
+        variables: Dictionary of (resource_id, project_id, month) -> variable (to check if variable exists)
     
     Returns:
         List of dummy resource allocation dictionaries
@@ -721,34 +733,134 @@ def _create_dummy_resources_for_remaining_budget(
             
             # Only create dummy resource if there's significant remaining budget (> 1% of monthly budget)
             if remaining_budget > monthly_budget * 0.01:
-                # Create dummy resource ID
-                dummy_resource_id = f'DUMMY_{pid}_{month}'
-                dummy_resource_name = f'New Hire - {proj_info["project_name"]} - {month}'
+                # Check if there are existing resources that could fulfill this remaining budget
+                # but aren't allocated (due to constraints)
+                has_available_resources = _check_if_resources_available_for_project(
+                    pid, month, remaining_budget, proj_info, resources_df,
+                    resource_month_utilized, resource_available_months, resource_teams, variables
+                )
                 
-                # Use project's team/sub_team/pod for dummy resource
-                team_info = project_team_info.get(pid, {})
-                team_name = team_info.get('team', '')
-                sub_team_name = team_info.get('sub_team', '')
-                pod_name = team_info.get('pod', '')
-                
-                # Calculate FTE needed
-                fte_needed = remaining_budget / avg_monthly_cost if avg_monthly_cost > 0 else 0.0
-                
-                # Round remaining budget to nearest whole number (currency)
-                remaining_budget_rounded = round(remaining_budget)
-                
-                # Create dummy allocation
-                dummy_allocations.append({
-                    'resource_id': dummy_resource_id,
-                    'resource_name': dummy_resource_name,
-                    'project_id': pid,
-                    'project_name': proj_info['project_name'],
-                    'month': month,
-                    'allocated_cost': remaining_budget_rounded,  # Round currency to nearest whole number
-                    'priority_score': proj_info.get('priority', 0.5),
-                    'skill_match_score': 0.0,  # Dummy resource - no skill match
-                    'effort_alignment': 0.0,  # Dummy resource - no effort alignment
-                    'explanation': f"Dummy resource (new hire needed): {fte_needed:.2f} FTE, Location: {best_location}, Team: {team_name or 'N/A'}, Sub-team: {sub_team_name or 'N/A'}, Pod: {pod_name or 'N/A'}, Cost: £{remaining_budget_rounded:,.0f}"
-                })
+                # Only create dummy resource if NO available resources can fulfill the remaining budget
+                if not has_available_resources:
+                    # Create dummy resource ID
+                    dummy_resource_id = f'DUMMY_{pid}_{month}'
+                    dummy_resource_name = f'New Hire - {proj_info["project_name"]} - {month}'
+                    
+                    # Use project's team/sub_team/pod for dummy resource
+                    team_info = project_team_info.get(pid, {})
+                    team_name = team_info.get('team', '')
+                    sub_team_name = team_info.get('sub_team', '')
+                    pod_name = team_info.get('pod', '')
+                    
+                    # Calculate FTE needed
+                    fte_needed = remaining_budget / avg_monthly_cost if avg_monthly_cost > 0 else 0.0
+                    
+                    # Round remaining budget to nearest whole number (currency)
+                    remaining_budget_rounded = round(remaining_budget)
+                    
+                    # Create dummy allocation
+                    dummy_allocations.append({
+                        'resource_id': dummy_resource_id,
+                        'resource_name': dummy_resource_name,
+                        'project_id': pid,
+                        'project_name': proj_info['project_name'],
+                        'month': month,
+                        'allocated_cost': remaining_budget_rounded,  # Round currency to nearest whole number
+                        'priority_score': proj_info.get('priority', 0.5),
+                        'skill_match_score': 0.0,  # Dummy resource - no skill match
+                        'effort_alignment': 0.0,  # Dummy resource - no effort alignment
+                        'explanation': f"Dummy resource (new hire needed): {fte_needed:.2f} FTE, Location: {best_location}, Team: {team_name or 'N/A'}, Sub-team: {sub_team_name or 'N/A'}, Pod: {pod_name or 'N/A'}, Cost: £{remaining_budget_rounded:,.0f}"
+                    })
     
     return dummy_allocations
+
+
+def _check_if_resources_available_for_project(
+    pid: int, month: str, remaining_budget: float, proj_info: Dict,
+    resources_df: pd.DataFrame, resource_month_utilized: Dict,
+    resource_available_months: Dict, resource_teams: Dict, variables: Dict
+) -> bool:
+    """Check if there are existing resources that could fulfill the remaining budget.
+    
+    A resource is considered "available" if:
+    1. It's in the same team (if project specifies team)
+    2. It meets skill requirements (would have passed mandatory skills check)
+    3. It's available in that month
+    4. It has remaining capacity in that month
+    
+    Args:
+        pid: Project ID
+        month: Month to check
+        remaining_budget: Remaining budget to fulfill
+        proj_info: Project information dictionary
+        resources_df: DataFrame with all resources
+        resource_month_utilized: Dictionary tracking resource utilization
+        resource_available_months: Dictionary of resource availability
+        resource_teams: Dictionary of resource team information
+        variables: Dictionary of existing variables (to check if resource-project-month combination was possible)
+    
+    Returns:
+        True if there are available resources that could fulfill the budget, False otherwise
+    """
+    from utils import check_mandatory_skills
+    
+    preferred_team = proj_info.get('preferred_team', '')
+    preferred_sub_team = proj_info.get('preferred_sub_team', '')
+    preferred_pod = proj_info.get('preferred_pod', '')
+    required_skills = proj_info.get('required_skills', {})
+    
+    # Check each resource
+    for _, resource_row in resources_df.iterrows():
+        resource_id = str(resource_row['brid'])
+        resource_monthly_cost = float(resource_row['cost_per_month'])
+        
+        # Check 1: Team constraint (if project specifies team, resource must be from that team)
+        if preferred_team:
+            resource_team_info = resource_teams.get(resource_id, {'team': '', 'sub_team': '', 'pod': ''})
+            resource_team = resource_team_info.get('team', '')
+            if not resource_team or resource_team.lower() != preferred_team.lower():
+                continue  # Different team - not available
+        
+        # Check 2: Hierarchical fallback (pod/sub_team matching)
+        if preferred_pod or preferred_sub_team:
+            resource_team_info = resource_teams.get(resource_id, {'team': '', 'sub_team': '', 'pod': ''})
+            resource_pod = resource_team_info.get('pod', '')
+            resource_sub_team = resource_team_info.get('sub_team', '')
+            
+            if preferred_pod:
+                # Pod specified - try pod first, fallback to sub_team
+                pod_match = resource_pod and (preferred_pod.lower() == resource_pod.lower())
+                sub_team_match = preferred_sub_team and resource_sub_team and (preferred_sub_team.lower() == resource_sub_team.lower())
+                if not pod_match and not sub_team_match:
+                    continue  # Doesn't meet pod/sub_team requirement
+            elif preferred_sub_team:
+                # Sub_team specified - try sub_team, fallback to team (already checked above)
+                sub_team_match = resource_sub_team and (preferred_sub_team.lower() == resource_sub_team.lower())
+                if not sub_team_match:
+                    continue  # Doesn't meet sub_team requirement
+        
+        # Check 3: Mandatory skills (resource must meet mandatory skills)
+        can_allocate, _ = check_mandatory_skills(resource_row, required_skills)
+        if not can_allocate:
+            continue  # Doesn't meet mandatory skills
+        
+        # Check 4: Availability in that month
+        available_months = resource_available_months.get(resource_id, set())
+        if month not in available_months:
+            continue  # Not available in that month
+        
+        # Check 5: Has remaining capacity in that month
+        utilized_this_month = resource_month_utilized.get(resource_id, {}).get(month, 0.0)
+        remaining_capacity = resource_monthly_cost - utilized_this_month
+        
+        # Check 6: Check if a variable exists for this resource-project-month (means it was possible to allocate)
+        # If variable exists, it means the resource could have been allocated but wasn't (due to other constraints)
+        var_key = (resource_id, pid, month)
+        if var_key in variables:
+            # Variable exists - resource could have been allocated
+            # Check if it has enough capacity to fulfill remaining budget
+            if remaining_capacity >= remaining_budget * 0.01:  # At least 1% of remaining budget
+                return True  # Found an available resource
+    
+    # No available resources found
+    return False
