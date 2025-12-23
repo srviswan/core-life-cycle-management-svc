@@ -19,7 +19,8 @@ The Budget Allocator uses linear programming (OR-Tools) to solve the resource al
 - ✅ Hard constraint on mandatory skills with AND/OR operators
 - ✅ Priority calculation from Driver + Impact + Rank (weighted sum)
 - ✅ Waterfall allocation (highest priority first)
-- ✅ **Team/Sub-team/Pod Alignment** - Resources matching project's team/sub_team/pod are strongly preferred BEFORE skill matching
+- ✅ **Team/Sub-team/Pod Alignment (Hard Constraint)** - Projects with specified teams ONLY allocate resources from that team. Hierarchical fallback: pod → sub_team (within team), never below sub_team
+- ✅ **Dummy Resources (New Hires)** - Automatically creates dummy resources for remaining budget, placed in best location with appropriate cost
 - ✅ **Driver-based allocation caps** - Projects within a driver fully allocated before moving to other drivers
 - ✅ **Funding source prioritization** - Priority and rank considered within each funding_source
 - ✅ **Simplified skill system with regex** - Easy-to-use skill matching with AND/OR operators and regex patterns

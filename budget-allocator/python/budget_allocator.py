@@ -15,6 +15,7 @@ from config import (
     EFFORT_ESTIMATE_WEIGHT, SKILL_MATCH_WEIGHT, PRIORITY_WEIGHT,
     REGION_DIVERSITY_WEIGHT, TEAM_ALIGNMENT_WEIGHT
 )
+import math
 
 
 def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
@@ -266,46 +267,73 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
             if not can_allocate:
                 continue  # Skip - hard constraint
             
-            # Calculate team/sub_team/pod alignment score (BEFORE skill matching preference)
-            # This is a strong preference - resources matching team/sub_team/pod are preferred
-            # If no team/sub_team/pod match, system falls back to skill-based matching
-            team_alignment = 0.0
+            # HARD CONSTRAINT: Team matching
+            # If project specifies a team, ONLY allocate resources from that team
+            # Don't move people across teams
             preferred_team = proj_info.get('preferred_team', '')
             preferred_sub_team = proj_info.get('preferred_sub_team', '')
             preferred_pod = proj_info.get('preferred_pod', '')
             
-            # If project has no team preferences, team_alignment = 0.0 (neutral, no preference)
-            # System will use skill-based matching
-            if preferred_team or preferred_sub_team or preferred_pod:
-                resource_team_info = resource_teams.get(resource_id, {'team': '', 'sub_team': '', 'pod': ''})
-                resource_team = resource_team_info.get('team', '')
-                resource_sub_team = resource_team_info.get('sub_team', '')
-                resource_pod = resource_team_info.get('pod', '')
-                
-                # Calculate alignment: perfect match = 1.0, partial match = 0.5, no match = 0.0
-                # Weight: pod (most specific) > sub_team > team (least specific)
-                # Perfect match (all three) = 1.0
-                # Pod + sub_team match = 0.8
-                # Pod match only = 0.5
-                # Sub_team match only = 0.3
-                # Team match only = 0.2
-                
-                pod_match = preferred_pod and resource_pod and (preferred_pod.lower() == resource_pod.lower())
+            resource_team_info = resource_teams.get(resource_id, {'team': '', 'sub_team': '', 'pod': ''})
+            resource_team = resource_team_info.get('team', '')
+            resource_sub_team = resource_team_info.get('sub_team', '')
+            resource_pod = resource_team_info.get('pod', '')
+            
+            # Hard constraint: If project specifies a team, resource MUST be from that team
+            if preferred_team:
+                if not resource_team or resource_team.lower() != preferred_team.lower():
+                    continue  # Skip - hard constraint: different team
+            
+            # Hierarchical fallback logic (within the same team):
+            # 1. If pod is specified: try pod first, fallback to sub_team (within same team), NOT below sub_team
+            # 2. If sub_team is specified (but no pod): try sub_team, fallback to team, NOT below team
+            # 3. If only team is specified: allow any resource from that team
+            
+            team_alignment = 0.0
+            can_allocate_by_team = True  # Flag to check if resource can be allocated based on team hierarchy
+            
+            if preferred_pod:
+                # Pod is specified - try pod first, fallback to sub_team (within same team)
+                pod_match = resource_pod and (preferred_pod.lower() == resource_pod.lower())
                 sub_team_match = preferred_sub_team and resource_sub_team and (preferred_sub_team.lower() == resource_sub_team.lower())
+                
+                if pod_match:
+                    team_alignment = 1.0  # Perfect pod match
+                elif sub_team_match:
+                    # Fallback: sub_team match (within same team, which is already checked above)
+                    team_alignment = 0.8  # Sub_team match (pod not available, but sub_team matches)
+                else:
+                    # No pod match and no sub_team match - don't allocate (don't fallback below sub_team)
+                    can_allocate_by_team = False
+            elif preferred_sub_team:
+                # Sub_team specified (but no pod) - try sub_team, fallback to team
+                sub_team_match = resource_sub_team and (preferred_sub_team.lower() == resource_sub_team.lower())
                 team_match = preferred_team and resource_team and (preferred_team.lower() == resource_team.lower())
                 
-                if pod_match and sub_team_match and team_match:
-                    team_alignment = 1.0  # Perfect match
-                elif pod_match and sub_team_match:
-                    team_alignment = 0.8  # Pod + sub_team match
-                elif pod_match:
-                    team_alignment = 0.5  # Pod match only
-                elif sub_team_match:
-                    team_alignment = 0.3  # Sub_team match only
+                if sub_team_match:
+                    team_alignment = 0.8  # Sub_team match
                 elif team_match:
-                    team_alignment = 0.2  # Team match only
+                    # Fallback: team match (within same team, which is already checked above)
+                    team_alignment = 0.5  # Team match (sub_team not available, but team matches)
                 else:
-                    team_alignment = 0.0  # No match - will fallback to skill matching
+                    # No sub_team match and no team match - don't allocate
+                    can_allocate_by_team = False
+            elif preferred_team:
+                # Only team specified - allow any resource from that team
+                team_match = resource_team and (preferred_team.lower() == resource_team.lower())
+                if team_match:
+                    team_alignment = 0.5  # Team match
+                else:
+                    # This shouldn't happen due to hard constraint above, but just in case
+                    can_allocate_by_team = False
+            else:
+                # No team preferences - allow allocation (neutral)
+                team_alignment = 0.0
+                can_allocate_by_team = True
+            
+            # Skip if team hierarchy constraint is not met
+            if not can_allocate_by_team:
+                continue  # Skip - hard constraint: doesn't meet team hierarchy requirements
             
             team_alignment_scores[(resource_id, pid)] = team_alignment
             
@@ -554,12 +582,18 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
     # Extract results
     allocations = []
     
+    # Track allocated budget per project per month
+    project_month_allocated = defaultdict(lambda: defaultdict(float))  # project_id -> month -> allocated_cost
+    
     for (resource_id, pid, month), var in variables.items():
         allocated_cost = var.solution_value()
         
         if allocated_cost > 0.001:  # Only non-zero allocations
             resource_row = resources_df[resources_df['brid'] == resource_id].iloc[0]
             proj_info = project_data[pid]
+            
+            # Track allocated budget
+            project_month_allocated[pid][month] += allocated_cost
             
             # Get skill scores
             skill_match = skill_scores.get((resource_id, pid), {'overall_score': 0.5})
@@ -608,4 +642,110 @@ def budget_allocator(resources_df: pd.DataFrame, projects_df: pd.DataFrame,
                 'explanation': explanation
             })
     
+    # Create dummy resources for remaining budget
+    # Calculate remaining budget per project per month and create dummy resources
+    dummy_resources = _create_dummy_resources_for_remaining_budget(
+        project_data, project_month_allocated, resources_df, all_months
+    )
+    allocations.extend(dummy_resources)
+    
     return allocations
+
+
+def _create_dummy_resources_for_remaining_budget(
+    project_data: Dict, project_month_allocated: Dict, resources_df: pd.DataFrame, all_months: List[str]
+) -> List[Dict]:
+    """Create dummy resources for remaining budget after allocation.
+    
+    For projects with remaining budget, create dummy resources that represent new hires.
+    These dummy resources are placed in the best location (for location balance) and
+    have appropriate cost (for cost balance).
+    
+    Args:
+        project_data: Dictionary of project information
+        project_month_allocated: Dictionary tracking allocated budget per project per month
+        resources_df: DataFrame with existing resources (for cost/location reference)
+        all_months: List of all months in the allocation period
+    
+    Returns:
+        List of dummy resource allocation dictionaries
+    """
+    dummy_allocations = []
+    
+    # Calculate average cost per month from existing resources (for cost balance)
+    if len(resources_df) > 0:
+        avg_monthly_cost = resources_df['cost_per_month'].mean()
+    else:
+        avg_monthly_cost = 10000.0  # Default if no resources
+    
+    # Get location distribution from existing resources (for location balance)
+    location_counts = defaultdict(int)
+    for _, resource_row in resources_df.iterrows():
+        location = str(resource_row.get('location', '')).strip()
+        if location:
+            location_counts[location] += 1
+    
+    # Find best location (most common, or first available if none)
+    best_location = max(location_counts.items(), key=lambda x: x[1])[0] if location_counts else 'Unknown'
+    
+    # Get team/sub_team/pod from projects for dummy resources
+    project_team_info = {}  # project_id -> {team, sub_team, pod}
+    for pid, proj_info in project_data.items():
+        project_team_info[pid] = {
+            'team': proj_info.get('preferred_team', ''),
+            'sub_team': proj_info.get('preferred_sub_team', ''),
+            'pod': proj_info.get('preferred_pod', '')
+        }
+    
+    # For each project, check remaining budget per month
+    for pid, proj_info in project_data.items():
+        # Skip efficiency projects (no budget)
+        if proj_info['is_efficiency']:
+            continue
+        
+        # Calculate monthly budget
+        total_budget = proj_info.get('alloc_budget', 0)
+        if total_budget <= 0:
+            continue
+        
+        months = proj_info.get('months', [])
+        if not months:
+            continue
+        
+        monthly_budget = total_budget / len(months)
+        
+        # Check each month for remaining budget
+        for month in months:
+            allocated_this_month = project_month_allocated[pid].get(month, 0.0)
+            remaining_budget = monthly_budget - allocated_this_month
+            
+            # Only create dummy resource if there's significant remaining budget (> 1% of monthly budget)
+            if remaining_budget > monthly_budget * 0.01:
+                # Create dummy resource ID
+                dummy_resource_id = f'DUMMY_{pid}_{month}'
+                dummy_resource_name = f'New Hire - {proj_info["project_name"]} - {month}'
+                
+                # Use project's team/sub_team/pod for dummy resource
+                team_info = project_team_info.get(pid, {})
+                team_name = team_info.get('team', '')
+                sub_team_name = team_info.get('sub_team', '')
+                pod_name = team_info.get('pod', '')
+                
+                # Calculate FTE needed
+                fte_needed = remaining_budget / avg_monthly_cost if avg_monthly_cost > 0 else 0.0
+                
+                # Create dummy allocation
+                dummy_allocations.append({
+                    'resource_id': dummy_resource_id,
+                    'resource_name': dummy_resource_name,
+                    'project_id': pid,
+                    'project_name': proj_info['project_name'],
+                    'month': month,
+                    'allocated_cost': remaining_budget,
+                    'priority_score': proj_info.get('priority', 0.5),
+                    'skill_match_score': 0.0,  # Dummy resource - no skill match
+                    'effort_alignment': 0.0,  # Dummy resource - no effort alignment
+                    'explanation': f"Dummy resource (new hire needed): {fte_needed:.2f} FTE, Location: {best_location}, Team: {team_name or 'N/A'}, Sub-team: {sub_team_name or 'N/A'}, Pod: {pod_name or 'N/A'}, Cost: £{remaining_budget:,.2f}"
+                })
+    
+    return dummy_allocations

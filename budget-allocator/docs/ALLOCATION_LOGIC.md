@@ -96,37 +96,47 @@ Example with multiplier = 100.0:
 
 This creates exponential preference for higher priority.
 
-## Team/Sub-team/Pod Alignment (Primary Preference)
+## Team/Sub-team/Pod Alignment (Hard Constraint + Hierarchical Fallback)
 
 ### Overview
 
-Before skill matching, the system strongly prefers resources that match the project's preferred team, sub-team, and pod. This ensures resources are allocated within their organizational units when possible.
+The system enforces **hard constraints** on team matching to prevent moving people across teams. It uses a hierarchical fallback strategy within the same team.
+
+### Hard Constraint: Team Matching
+
+**Critical Rule**: If a project specifies a team, **ONLY** resources from that team can be allocated. Resources from different teams are **excluded** (hard constraint).
+
+### Hierarchical Fallback Strategy (Within Same Team)
+
+The system uses a hierarchical fallback approach, but **never falls back below the specified level**:
+
+1. **If Pod is specified**:
+   - **First**: Try to match resources from the same pod
+   - **Fallback**: If no pod match, try sub_team match (within same team)
+   - **NOT below**: Never falls back to just team match if sub_team is specified
+
+2. **If Sub_team is specified (but no pod)**:
+   - **First**: Try to match resources from the same sub_team
+   - **Fallback**: If no sub_team match, try team match (within same team)
+   - **NOT below**: Never falls back below team level
+
+3. **If only Team is specified**:
+   - Allow any resource from that team
 
 ### Alignment Score Calculation
 
 The team alignment score is calculated based on matches:
 - **Perfect match** (team + sub_team + pod): 1.0
-- **Pod + sub_team match**: 0.8
-- **Pod match only**: 0.5
-- **Sub_team match only**: 0.3
-- **Team match only**: 0.2
-- **No match**: 0.0 (fallback to skill-based matching)
-
-### Allocation Strategy
-
-1. **First Priority**: Resources matching project's team/sub_team/pod are strongly preferred
-   - Weight in objective function: `TEAM_ALIGNMENT_WEIGHT = 5.0` (much higher than skill matching)
-   - This ensures team alignment is prioritized over skill matching
-
-2. **Fallback**: If no resources match team/sub_team/pod preferences:
-   - System falls back to skill-based matching
-   - Skill matching weight: `SKILL_MATCH_WEIGHT = 0.2` (lower than team alignment)
-
-3. **No Preferences**: If project has no team/sub_team/pod preferences:
-   - System uses skill-based matching (neutral behavior)
+- **Pod match only**: 1.0
+- **Sub_team match (pod fallback)**: 0.8
+- **Sub_team match only**: 0.8
+- **Team match (sub_team fallback)**: 0.5
+- **Team match only**: 0.5
+- **No match**: 0.0 (resource excluded if team constraint applies)
 
 ### Implementation
 
+- **Hard constraint**: Variables are not created for resource-project pairs where team constraint is violated
 - Team alignment is calculated **before** skill matching
 - Team alignment coefficient in objective function: `TEAM_ALIGNMENT_WEIGHT × team_alignment_score`
 - Skill matching coefficient: `SKILL_MATCH_WEIGHT × skill_score`
@@ -240,6 +250,48 @@ Example:
 2. **Continuous allocations**: Cost allocations are continuous (not discrete FTE)
 3. **Static priorities**: Priorities don't change during allocation
 4. **No dependencies**: Projects are independent (no sequencing)
+
+## Dummy Resources (New Hires)
+
+### Overview
+
+After allocation, if projects have remaining budget that cannot be fulfilled by existing resources (due to team constraints or capacity limits), the system creates **dummy resources** representing new hires needed.
+
+### When Dummy Resources Are Created
+
+Dummy resources are created when:
+- Project has remaining budget after allocation (> 1% of monthly budget)
+- Existing resources cannot fulfill the budget (due to team constraints, capacity, or availability)
+- Project is not an efficiency project (has budget > 0)
+
+### Dummy Resource Characteristics
+
+Each dummy resource represents a new hire with:
+- **Location**: Best location (most common location among existing resources, for location balance)
+- **Cost**: Average monthly cost of existing resources (for cost balance)
+- **Team/Sub-team/Pod**: Inherited from the project's preferred team/sub_team/pod
+- **FTE**: Calculated as `remaining_budget / average_monthly_cost`
+
+### Dummy Resource Format
+
+- **Resource ID**: `DUMMY_{project_id}_{month}`
+- **Resource Name**: `New Hire - {project_name} - {month}`
+- **Explanation**: Includes FTE needed, location, team/sub_team/pod, and cost
+
+### Output
+
+Dummy resources appear in:
+- **Allocations sheet**: Marked with `DUMMY_` prefix in resource_id
+- **Project Summary**: Count of dummy resources needed per project
+- **Monthly View**: Included in monthly allocation views
+
+### Use Case
+
+Dummy resources help identify:
+- Where new hires are needed
+- What team/sub_team/pod they should join
+- What location they should be in (for balance)
+- What cost level is appropriate
 
 ## Future Enhancements
 

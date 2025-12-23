@@ -66,22 +66,11 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
     allocs_with_fte['fte_allocated'] = allocs_with_fte['allocated_cost'] / allocs_with_fte['cost_per_month']
     allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].fillna(0.0)
     
-    # Allocations sheet
+    # Allocations sheet (includes both real and dummy resources)
     allocations_sheet = allocs_with_fte[[
         'resource_id', 'resource_name', 'project_id', 'project_name',
         'month', 'allocated_cost', 'fte_allocated', 'priority_score', 'skill_match_score', 'explanation'
     ]].copy()
-    
-    # Calculate FTE for allocations (needed for project summary)
-    allocs_with_fte = allocs_df.merge(
-        resources_df[['brid', 'cost_per_year']],
-        left_on='resource_id',
-        right_on='brid',
-        how='left'
-    )
-    allocs_with_fte['cost_per_month'] = allocs_with_fte['cost_per_year'] / 12.0
-    allocs_with_fte['fte_allocated'] = allocs_with_fte['allocated_cost'] / allocs_with_fte['cost_per_month']
-    allocs_with_fte['fte_allocated'] = allocs_with_fte['fte_allocated'].fillna(0.0)
     
     # Project Summary
     # Filter out projects without effort_estimate_man_months (same logic as in allocator)
@@ -118,7 +107,10 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
         budget_fulfillment_pct = (allocated_budget / requested_budget * 100) if requested_budget > 0 else 0.0
         
         priority_score = calculate_project_priority(proj_row, PRIORITY_WEIGHTS)
-        resources_allocated = len(set(proj_allocations['resource_id']))
+        # Count real resources only (exclude dummy resources)
+        real_resources = proj_allocations[~proj_allocations['resource_id'].str.startswith('DUMMY_', na=False)]
+        resources_allocated = len(set(real_resources['resource_id']))
+        dummy_resources_count = len(set(proj_allocations[proj_allocations['resource_id'].str.startswith('DUMMY_', na=False)]['resource_id']))
         
         effort_estimate = float(effort_estimate) if pd.notna(effort_estimate) else None
         
@@ -143,6 +135,7 @@ def generate_output_excel(allocations: List[Dict], projects_df: pd.DataFrame,
             'annual_fte_allocated': annual_fte_allocated,  # Average FTE (allocated_fte / months_active)
             'months_active': months_active,
             'resources_allocated': resources_allocated,
+            'dummy_resources_needed': dummy_resources_count,  # Number of dummy resources (new hires) needed
             'effort_estimate_man_months': effort_estimate,
             'is_efficiency_project': total_budget == 0
         })
